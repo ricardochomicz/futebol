@@ -131,3 +131,34 @@ def test_promotion_respects_role(client):
     listing = send(client, "!lista")
     assert "linha-b (linha-b)" in listing
     assert "g4 (g4)" not in listing
+
+
+def test_goalkeeper_attendance(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    send(client, "!gol", "g1")
+    send(client, "!gol", "g2")
+
+    assert "Registre" in send(client, "!encerrar")
+
+    assert "administradores" in send(client, "!presenca g1", "g1")
+
+    send(client, "!presenca g1")
+    send(client, "!falta g2")
+
+    assert "encerrada" in send(client, "!encerrar")
+
+    assert "1/1" in send(client, "!frequencia", "g1")
+    assert "0/1" in send(client, "!frequencia", "g2")
+
+
+def test_closed_match_blocks_goalkeeper_registration(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    send(client, "!fechar")
+
+    assert "fechadas" in send(client, "!gol", "g1")
+
+    listing = send(client, "!lista")
+    assert "Goleiros — isentos: 0/2" in listing
+    assert "g1 (g1)" not in listing
