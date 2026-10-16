@@ -118,10 +118,10 @@ def handle(db, message, is_admin):
                 (mid, player, status, payment),
             )
 
-        if status == "confirmed":
-            return "✅ Presença confirmada!"
+            if status == "confirmed":
+                return "✅ Presença confirmada!"
 
-        return "Você entrou na fila de espera."
+            return "Você entrou na fila de espera."
 
     if command in {"!lista", "!espera"}:
         if command == "!lista":
