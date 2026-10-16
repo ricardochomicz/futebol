@@ -254,11 +254,107 @@ def test_guest_migration_preserves_existing_players(tmp_path):
 
     path = str(tmp_path / "old.db")
     with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE players (group_id TEXT, player_id TEXT, name TEXT, "
-                   "PRIMARY KEY(group_id, player_id))")
+        db.execute(
+            "CREATE TABLE players (group_id TEXT, player_id TEXT, name TEXT, "
+            "PRIMARY KEY(group_id, player_id))"
+        )
         db.execute("INSERT INTO players VALUES ('g','a','Carlos')")
     for _ in range(2):
         with transaction(path) as db:
             row = db.execute("SELECT * FROM players").fetchone()
             assert row["name"] == "Carlos"
             assert row["invited_by"] is None
+
+
+def test_repeated_message_creates_only_one_guest(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    message = {
+        "group_id": "g",
+        "player_id": "admin",
+        "message_id": "evento-001",
+        "text": "!convidado linha Rafael Teste",
+    }
+
+    first = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json=message,
+    )
+
+    second = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json=message,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+
+    listing = send(client, "!lista")
+    assert listing.count("Rafael Teste") == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"text": "!convidado linha Outra Pessoa"},
+        {"player_id": "outro-jogador"},
+    ],
+)
+def test_reused_message_id_rejects_different_payload(client, changes):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    message = {
+        "group_id": "g",
+        "player_id": "admin",
+        "message_id": "evento-001",
+        "text": "!convidado linha Rafael Teste",
+    }
+
+    first = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json=message,
+    )
+    assert first.status_code == 200
+
+    conflicting = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json={**message, **changes},
+    )
+
+    assert conflicting.status_code == 409
+
+    listing = send(client, "!lista")
+    assert listing.count("Rafael Teste") == 1
+    assert "Outra Pessoa" not in listing
+
+
+def test_concurrent_duplicate_message_creates_only_one_guest(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    message = {
+        "group_id": "g",
+        "player_id": "admin",
+        "message_id": "evento-simultaneo",
+        "text": "!convidado linha Rafael Concorrente",
+    }
+
+    def deliver(_):
+        return client.post(
+            "/messages",
+            headers={"x-api-key": "secret"},
+            json=message,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(deliver, range(2)))
+
+    assert all(response.status_code == 200 for response in responses)
+    assert responses[0].json() == responses[1].json()
+
+    listing = send(client, "!lista")
+    assert listing.count("Rafael Concorrente") == 1
