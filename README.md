@@ -141,3 +141,51 @@ participantes do grupo continuam usando `!sair`.
 
 O banco existente recebe automaticamente a coluna `players.invited_by` na próxima
 transação; os jogadores já cadastrados são preservados.
+
+## Avulsos e mensalistas
+
+O preço avulso padrão é **R$ 13,00**. Para abrir uma partida com esse valor:
+
+```text
+!abrir 2026-10-22T20:00:00-03:00 18
+```
+
+O terceiro argumento opcional continua permitindo definir outro valor avulso
+explicitamente. Preços e pagamentos de partidas anteriores não são alterados.
+
+O administrador cadastra o jogador como mensalista **para um mês específico**:
+
+```text
+!mensalista carlos 2026-10
+!mensalidade carlos 2026-10
+```
+
+O primeiro comando cria a cobrança de R$ 50,00; o segundo confirma o recebimento.
+O jogador deve estar cadastrado no grupo (basta ter enviado um comando).
+Esses comandos funcionam mesmo sem partida ativa. A modalidade não renova
+automaticamente: cadastre o próximo mês explicitamente.
+
+A mensalidade cobre todos os jogos do mês calendário, inclusive meses com cinco
+jogos. A referência é o mês da data da partida, com o deslocamento de horário
+informado na abertura, e não a data em que o pagamento é recebido.
+Mensalistas precisam confirmar presença e entram na espera normalmente.
+Mensalidade pendente não bloqueia inscrição; aparece como dívida mensal de R$ 50,
+sem cobrança avulsa adicional. `!paguei` de um mensalista confirmado declara a
+mensalidade da partida; a confirmação usa `!mensalidade ID AAAA-MM`.
+`!pagamento ID` continua exclusivo para pagamentos avulsos.
+
+Goleiros continuam isentos da partida e não recebem cobrança mensal automática.
+Não cadastre goleiros isentos como mensalistas: o cadastro mensal é uma obrigação
+explícita de R$ 50, independente do número de inscrições ou cancelamentos.
+Não há conversão, desconto proporcional, estorno ou compensação automática.
+Se já houver avulso pago no mês, o cadastro mensal é recusado para evitar
+converter ou perder o recebimento anterior silenciosamente.
+
+`!financeiro` mostra avulsos da partida e, em seção separada, mensalidades do mês.
+`!financeiro 2026-10` consulta somente mensalidades, inclusive sem partida ativa.
+O total mensal é do mês inteiro e não deve ser somado novamente por partida.
+Convidados também podem ser cadastrados como mensalistas pelo ID gerado; lembre
+que um novo cadastro de convidado gera outra identidade.
+
+O banco ganha a tabela `memberships` automaticamente; inscrições, histórico e
+respostas já armazenadas para deduplicação são preservados.
