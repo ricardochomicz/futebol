@@ -39,7 +39,7 @@ def handle(db, message, is_admin):
     if command in {"!vou", "!lista", "!espera"} and not match:
         return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
-        if command in {"!vou", "!lista", "!espera"}:
+    if command in {"!vou", "!lista", "!espera"}:
         mid = match["id"]
 
         rows = db.execute(
@@ -74,8 +74,8 @@ def handle(db, message, is_admin):
         )
 
         if command == "!vou":
-        if match["status"] != "open":
-            return "As inscrições estão fechadas."
+            if match["status"] != "open":
+                return "As inscrições estão fechadas."
 
         if mine and mine["status"] != "cancelled":
             return "Você já está na lista."
@@ -112,7 +112,7 @@ def handle(db, message, is_admin):
 
         return "Você entrou na fila de espera."
 
-        if command in {"!lista", "!espera"}:
+    if command in {"!lista", "!espera"}:
         if command == "!lista":
             selected = confirmed
             title = (
