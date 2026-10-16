@@ -4,7 +4,7 @@ from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
- group_id TEXT NOT NULL, player_id TEXT NOT NULL, name TEXT NOT NULL,
+ group_id TEXT NOT NULL, player_id TEXT NOT NULL, name TEXT NOT NULL, invited_by TEXT,
  PRIMARY KEY(group_id, player_id));
 CREATE TABLE IF NOT EXISTS matches (
  id INTEGER PRIMARY KEY, group_id TEXT NOT NULL, starts_at TEXT NOT NULL,
@@ -27,6 +27,12 @@ exempt INTEGER NOT NULL DEFAULT 0
 
 
 def migrate(connection):
+    player_columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(players)")
+    }
+    if "invited_by" not in player_columns:
+        connection.execute("ALTER TABLE players ADD COLUMN invited_by TEXT")
+
     match_columns = {
         row["name"] for row in connection.execute("PRAGMA table_info(matches)")
     }
