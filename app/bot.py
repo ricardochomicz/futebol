@@ -35,6 +35,103 @@ def handle(db, message, is_admin):
         db.execute('INSERT INTO matches(group_id,starts_at,capacity,price,status) VALUES (?,?,?,?,\'open\')',
                    (group, date.isoformat(), capacity, int(price * 100)))
         return '⚽ Partida aberta! Digite !vou para participar.'
+
+    if command in {"!vou", "!lista", "!espera"} and not match:
+        return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
+
+        if command in {"!vou", "!lista", "!espera"}:
+        mid = match["id"]
+
+        rows = db.execute(
+            """
+            SELECT r.*, p.name
+            FROM registrations AS r
+            JOIN players AS p
+              ON p.player_id = r.player_id
+             AND p.group_id = ?
+            WHERE r.match_id = ?
+            ORDER BY r.id
+            """,
+            (group, mid),
+        ).fetchall()
+
+        confirmed = [
+            row for row in rows
+            if row["status"] == "confirmed"
+        ]
+
+        waiting = [
+            row for row in rows
+            if row["status"] == "waiting"
+        ]
+
+        mine = next(
+            (
+                row for row in rows
+                if row["player_id"] == player
+            ),
+            None,
+        )
+
+        if command == "!vou":
+        if match["status"] != "open":
+            return "As inscrições estão fechadas."
+
+        if mine and mine["status"] != "cancelled":
+            return "Você já está na lista."
+
+        status = (
+            "confirmed"
+            if len(confirmed) < match["capacity"]
+            else "waiting"
+        )
+
+        payment = mine["payment"] if mine else "pending"
+
+        if mine:
+            db.execute(
+                "DELETE FROM registrations WHERE id = ?",
+                (mine["id"],),
+            )
+
+        db.execute(
+            """
+            INSERT INTO registrations (
+                match_id,
+                player_id,
+                status,
+                payment
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (mid, player, status, payment),
+        )
+
+        if status == "confirmed":
+            return "✅ Presença confirmada!"
+
+        return "Você entrou na fila de espera."
+
+        if command in {"!lista", "!espera"}:
+        if command == "!lista":
+            selected = confirmed
+            title = (
+                f"⚽ {match['starts_at']} — "
+                f"{len(confirmed)}/{match['capacity']} confirmados"
+            )
+        else:
+            selected = waiting
+            title = "Fila de espera"
+
+        lines = [
+            f"{position}. {row['name']} ({row['player_id']})"
+            for position, row in enumerate(selected, start=1)
+        ]
+
+        content = "\n".join(lines) if lines else "Lista vazia."
+
+        return f"{title}\n{content}"
+
     if command == '!frequencia':
         row = db.execute("SELECT COUNT(*) total, COALESCE(SUM(r.attended),0) present FROM registrations r "
                          "JOIN matches m ON m.id=r.match_id WHERE m.group_id=? AND r.player_id=? "
