@@ -55,6 +55,55 @@ reconexão. A sessão deve ser protegida como uma credencial. A elegibilidade e 
 condições atuais de uma integração oficial precisam ser verificadas antes da escolha.
 Não publique este simulador diretamente como webhook de produção.
 
+## Regras das partidas
+
+Cada grupo pode ter uma partida ativa por vez.
+
+- Até 18 vagas de linha, com quantidade definida na abertura.
+- Duas vagas de goleiro, adicionais às vagas de linha.
+- Jogadores de linha pagam o valor definido na abertura.
+- Goleiros são isentos.
+- Linha e goleiros possuem filas de espera separadas.
+- Cancelar uma confirmação promove o primeiro da espera da mesma função.
+- Para mudar de função, o jogador deve cancelar e se inscrever novamente.
+- Fechar inscrições bloqueia novas entradas, mas permite cancelamentos
+  e promoções de quem já está na espera.
+
+### Comandos dos jogadores
+
+| Comando | Ação |
+|---|---|
+| `!vou` | Inscrever-se como jogador de linha |
+| `!gol` | Inscrever-se como goleiro |
+| `!sair` | Cancelar a inscrição |
+| `!lista` | Consultar confirmados por função |
+| `!espera` | Consultar as filas de espera |
+| `!valor` | Consultar o valor e a regra de isenção |
+| `!paguei` | Declarar pagamento, sujeito à validação |
+| `!frequencia` | Consultar presenças e faltas em partidas encerradas |
+
+### Exemplo de abertura
+
+O administrador envia:
+
+!abrir 2026-10-21T20:00:00-03:00 18 20.00
+
+Isso abre 18 vagas de linha e duas de goleiro.
+O valor por jogador de linha é R$ 20,00.
+
+### Pagamentos e frequência
+
+Declarar pagamento com `!paguei` não confirma o recebimento.
+O administrador confirma com `!pagamento ID`.
+
+A isenção não conta como pagamento recebido. Se alguém já pagou e depois
+mudou para goleiro, o pagamento anterior permanece registrado.
+Reembolsos são tratados manualmente.
+
+Estar confirmado não significa ter comparecido.
+O administrador registra `!presenca ID` ou `!falta ID` para cada confirmado.
+A partida só pode ser encerrada após todos esses registros.
+
 ## Testes
 
 ```bash
