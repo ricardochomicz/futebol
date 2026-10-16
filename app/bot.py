@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 HELP = (
-    "Comandos: !vou, !sair, !lista, !espera, !valor, !paguei, !frequencia. "
+    "Comandos: !vou, !gol, !sair, !lista, !espera, !valor, !paguei, !frequencia. "
     "Admin: !abrir DATA_ISO VAGAS VALOR, !fechar, !pagamento ID, "
     "!presenca ID, !falta ID, !financeiro, !encerrar."
 )
@@ -88,15 +88,28 @@ def handle(db, message, is_admin):
             None,
         )
 
-        if command == "!vou":
+        if command in {"!vou", "!goleiro"}:
             if match["status"] != "open":
                 return "As inscrições estão fechadas."
 
             if mine and mine["status"] != "cancelled":
-                return "Você já está na lista."
+                return (
+                    "Você já está na lista. "
+                    "Para mudar de função, use !sair e se inscreva novamente."
+                )
 
-            status = "confirmed" if len(confirmed) < match["capacity"] else "waiting"
+            role = "goalkeeper" if command == "!goleiro" else "line"
+            exempt = int(role == "goalkeeper")
 
+            capacity = (
+                match["goalkeeper_capacity"]
+                if role == "goalkeeper"
+                else match["capacity"]
+            )
+
+            occupied = sum(row["role"] == role for row in confirmed)
+
+            status = "confirmed" if occupied < capacity else "waiting"
             payment = mine["payment"] if mine else "pending"
 
             if mine:
@@ -111,37 +124,55 @@ def handle(db, message, is_admin):
                     match_id,
                     player_id,
                     status,
-                    payment
+                    payment,
+                    role,
+                    exempt
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (mid, player, status, payment),
+                (mid, player, status, payment, role, exempt),
             )
 
             if status == "confirmed":
+                if role == "goalkeeper":
+                    return "🧤 Presença confirmada como goleiro! Você está isento."
+
                 return "✅ Presença confirmada!"
 
-            return "Você entrou na fila de espera."
+            if role == "goalkeeper":
+                return "Você entrou na fila de espera de goleiros."
+
+            return "Você entrou na fila de espera de jogadores de linha."
 
     if command in {"!lista", "!espera"}:
-        if command == "!lista":
-            selected = confirmed
-            title = (
-                f"⚽ {match['starts_at']} — "
-                f"{len(confirmed)}/{match['capacity']} confirmados"
-            )
-        else:
-            selected = waiting
-            title = "Fila de espera"
+        selected = confirmed if command == "!lista" else waiting
 
-        lines = [
-            f"{position}. {row['name']} ({row['player_id']})"
-            for position, row in enumerate(selected, start=1)
+        sections = [
+            f"⚽ {match['starts_at']}",
+            "Confirmados" if command == "!lista" else "Fila de espera",
         ]
 
-        content = "\n".join(lines) if lines else "Lista vazia."
+        for role, label, capacity in (
+            ("line", "Linha", match["capacity"]),
+            ("goalkeeper", "Goleiros — isentos", match["goalkeeper_capacity"]),
+        ):
+            players = [row for row in selected if row["role"] == role]
 
-        return f"{title}\n{content}"
+            heading = (
+                f"{label}: {len(players)}/{capacity}"
+                if command == "!lista"
+                else f"{label}: {len(players)} aguardando"
+            )
+
+            lines = [
+                f"{position}. {row['name']} ({row['player_id']})"
+                for position, row in enumerate(players, start=1)
+            ]
+
+            sections.append(heading)
+            sections.append("\n".join(lines) if lines else "Lista vazia.")
+
+        return "\n".join(sections)
 
     if command == "!frequencia":
         row = db.execute(
@@ -153,7 +184,8 @@ def handle(db, message, is_admin):
         return f"Presenças: {row['present']}/{row['total']} partidas com frequência registrada."
     if (
         command
-        not in {"!vou", "!sair", "!lista", "!espera", "!valor", "!paguei"} | ADMIN
+        not in {"!vou", "!gol", "!sair", "!lista", "!espera", "!valor", "!paguei"}
+        | ADMIN
     ):
         return HELP
     if not match:
@@ -175,8 +207,9 @@ def handle(db, message, is_admin):
             "UPDATE registrations SET status='cancelled',attended=NULL WHERE id=?",
             (mine["id"],),
         )
-        if mine["status"] == "confirmed" and waiting:
-            promoted = waiting[0]
+        same_role_waiting = [row for row in waiting if row["role"] == mine["role"]]
+        if mine["status"] == "confirmed" and same_role_waiting:
+            promoted = same_role_waiting[0]
             db.execute(
                 "UPDATE registrations SET status='confirmed' WHERE id=?",
                 (promoted["id"],),
@@ -185,10 +218,15 @@ def handle(db, message, is_admin):
         return "Inscrição cancelada."
 
     if command == "!valor":
-        return f"Valor por jogador: R$ {match['price']/100:.2f}"
+        return (
+            f"Valor por jogador de linha: R$ {match['price'] / 100:.2f}\n"
+            "Goleiros são isentos."
+        )
     if command == "!paguei":
         if not mine or mine["status"] != "confirmed":
             return "Você precisa estar na lista de confirmados."
+        if mine["exempt"]:
+            return "Você está isento do pagamento desta partida."
         if mine["payment"] == "paid":
             return "Seu pagamento já foi confirmado."
         db.execute(
@@ -202,6 +240,8 @@ def handle(db, message, is_admin):
         if not target:
             return "Informe o ID de um jogador confirmado, conforme !lista."
         if command == "!pagamento":
+            if target["exempt"]:
+                return "Esse jogador está isento do pagamento."
             db.execute(
                 "UPDATE registrations SET payment='paid' WHERE id=?", (target["id"],)
             )
@@ -211,17 +251,39 @@ def handle(db, message, is_admin):
                 (int(command == "!presenca"), target["id"]),
             )
         return "Registro atualizado."
+
     if command == "!financeiro":
-        # Include payments from cancellations so receipts do not disappear.
-        paid = sum(r["payment"] == "paid" for r in rows)
-        details = "\n".join(
-            f"{r['name']} ({r['player_id']}): {r['payment']} / {r['status']}"
-            for r in rows
+        paid = sum(row["payment"] == "paid" for row in rows)
+
+        debtors = [
+            row for row in confirmed if not row["exempt"] and row["payment"] != "paid"
+        ]
+
+        exempt_count = sum(bool(row["exempt"]) for row in confirmed)
+
+        details = []
+
+        for row in rows:
+            situation = "isento" if row["exempt"] else row["payment"]
+
+            if row["exempt"] and row["payment"] == "paid":
+                situation = "isento, com pagamento anterior registrado"
+
+            details.append(
+                f"{row['name']} ({row['player_id']}): " f"{situation} / {row['status']}"
+            )
+
+        return (
+            f"Recebido: R$ {paid * match['price'] / 100:.2f}\n"
+            f"Pendente dos confirmados: "
+            f"R$ {len(debtors) * match['price'] / 100:.2f}\n"
+            f"Confirmados isentos: {exempt_count}\n" + "\n".join(details)
         )
-        return f"Recebido: R$ {paid * match['price']/100:.2f}\n" + details
+
     if command == "!fechar":
         db.execute("UPDATE matches SET status='closed' WHERE id=?", (mid,))
         return "Inscrições fechadas."
+
     if command == "!encerrar":
         if any(r["attended"] is None for r in confirmed):
             return "Registre !presenca ou !falta para todos os confirmados antes de encerrar."
