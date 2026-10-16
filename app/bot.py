@@ -1,12 +1,16 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
 HELP = (
     "Comandos: !vou, !gol, !sair, !lista, !espera, !valor, !paguei, !frequencia. "
     "Admin: !abrir DATA_ISO VAGAS VALOR, !fechar, !pagamento ID, "
-    "!presenca ID, !falta ID, !financeiro, !encerrar."
+    "!presenca ID, !falta ID, !financeiro, !encerrar, "
+    "!convidado linha|gol NOME, !remover ID."
 )
 ADMIN = {
+    "!convidado",
+    "!remover",
     "!abrir",
     "!fechar",
     "!pagamento",
@@ -105,7 +109,7 @@ def handle(db, message, is_admin):
 
     rows = db.execute(
         """
-        SELECT r.*, p.name
+        SELECT r.*, p.name, p.invited_by
         FROM registrations AS r
         JOIN players AS p
           ON p.player_id = r.player_id
@@ -125,17 +129,31 @@ def handle(db, message, is_admin):
         None,
     )
 
-    if command in {"!vou", "!gol"}:
+    if command in {"!vou", "!gol", "!convidado"}:
         if match["status"] != "open":
             return "As inscrições estão fechadas."
 
-        if mine and mine["status"] != "cancelled":
+        if command != "!convidado" and mine and mine["status"] != "cancelled":
             return (
                 "Você já está na lista. "
                 "Para mudar de função, use !sair e se inscreva novamente."
             )
 
-        role = "goalkeeper" if command == "!gol" else "line"
+        guest_name = None
+        if command == "!convidado":
+            if len(args) < 2 or args[0].lower() not in {"linha", "gol"}:
+                return "Use: !convidado linha|gol NOME"
+            guest_name = " ".join(args[1:])
+            if len(guest_name) > 100:
+                return "O nome do convidado deve ter até 100 caracteres."
+            role = "goalkeeper" if args[0].lower() == "gol" else "line"
+            player = f"convidado-{uuid4().hex}"
+            db.execute(
+                "INSERT INTO players(group_id,player_id,name,invited_by) VALUES (?,?,?,?)",
+                (group, player, guest_name, message.player_id),
+            )
+        else:
+            role = "goalkeeper" if command == "!gol" else "line"
         exempt = int(role == "goalkeeper")
 
         capacity = (
@@ -145,6 +163,8 @@ def handle(db, message, is_admin):
         occupied = sum(row["role"] == role for row in confirmed)
 
         status = "confirmed" if occupied < capacity else "waiting"
+        if command == "!convidado":
+            mine = None
         payment = mine["payment"] if mine else "pending"
 
         if mine:
@@ -167,6 +187,11 @@ def handle(db, message, is_admin):
             """,
             (mid, player, status, payment, role, exempt),
         )
+
+        if guest_name is not None:
+            situation = "confirmado" if status == "confirmed" else "na fila de espera"
+            function = "goleiro (isento)" if role == "goalkeeper" else "linha"
+            return f"{guest_name}: {situation} como {function}.\nID: {player}"
 
         if status == "confirmed":
             if role == "goalkeeper":
@@ -201,6 +226,7 @@ def handle(db, message, is_admin):
 
             lines = [
                 f"{position}. {row['name']} ({row['player_id']})"
+                + (f" — convidado por {row['invited_by']}" if row["invited_by"] else "")
                 for position, row in enumerate(players, start=1)
             ]
 
@@ -209,7 +235,14 @@ def handle(db, message, is_admin):
 
         return "\n".join(sections)
 
-    if command == "!sair":
+    if command in {"!sair", "!remover"}:
+        if command == "!remover":
+            if len(args) != 1:
+                return "Use: !remover ID_DO_CONVIDADO"
+            mine = next((row for row in rows if row["player_id"] == args[0]
+                         and row["invited_by"] is not None), None)
+            if not mine or mine["status"] == "cancelled":
+                return "Convidado não encontrado na lista desta partida."
         if not mine or mine["status"] == "cancelled":
             return "Você não está inscrito."
         db.execute(
