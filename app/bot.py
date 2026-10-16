@@ -64,7 +64,6 @@ def handle(db, message, is_admin):
         return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
     if command in {"!vou", "!gol", "!lista", "!espera"}:
-        role = "goalkeeper" if command == "!gol" else "line"
         mid = match["id"]
 
         rows = db.execute(
@@ -89,7 +88,7 @@ def handle(db, message, is_admin):
             None,
         )
 
-        if command in {"!vou", "!goleiro"}:
+        if command in {"!vou", "!gol"}:
             if match["status"] != "open":
                 return "As inscrições estão fechadas."
 
@@ -99,7 +98,7 @@ def handle(db, message, is_admin):
                     "Para mudar de função, use !sair e se inscreva novamente."
                 )
 
-            role = "goalkeeper" if command == "!goleiro" else "line"
+            role = "goalkeeper" if command == "!gol" else "line"
             exempt = int(role == "goalkeeper")
 
             capacity = (
