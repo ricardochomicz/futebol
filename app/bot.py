@@ -2,13 +2,18 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
+from app.billing import CASUAL_PRICE, manage_membership, membership, monthly_report, valid_month
+
 HELP = (
     "Comandos: !vou, !gol, !sair, !lista, !espera, !valor, !paguei, !frequencia. "
-    "Admin: !abrir DATA_ISO VAGAS VALOR, !fechar, !pagamento ID, "
+    "Admin: !abrir DATA_ISO VAGAS [VALOR_AVULSO], !fechar, !pagamento ID, "
     "!presenca ID, !falta ID, !financeiro, !encerrar, "
-    "!convidado linha|gol NOME, !remover ID."
+    "!convidado linha|gol NOME, !remover ID, "
+    "!mensalista ID AAAA-MM, !mensalidade ID AAAA-MM, !financeiro [AAAA-MM]."
 )
 ADMIN = {
+    "!mensalista",
+    "!mensalidade",
     "!convidado",
     "!remover",
     "!abrir",
@@ -48,13 +53,13 @@ def handle(db, message, is_admin):
         if match:
             return "Já existe uma partida ativa neste grupo."
         try:
-            if len(args) != 3:
+            if len(args) not in {2, 3}:
                 raise ValueError
             date = datetime.fromisoformat(args[0])
             if date.tzinfo is None:
                 raise ValueError
             capacity = int(args[1])
-            price = Decimal(args[2].replace(",", "."))
+            price = Decimal(args[2].replace(",", ".")) if len(args) == 3 else Decimal(CASUAL_PRICE) / 100
             if (
                 capacity < 1
                 or capacity > 18
@@ -65,12 +70,20 @@ def handle(db, message, is_admin):
             ):
                 raise ValueError
         except (ValueError, InvalidOperation):
-            return "Use: !abrir 2026-10-21T20:00:00-03:00 14 20.00"
+            return "Use: !abrir 2026-10-21T20:00:00-03:00 18 [13.00]"
         db.execute(
             "INSERT INTO matches(group_id,starts_at,capacity,price,status) VALUES (?,?,?,?,'open')",
             (group, date.isoformat(), capacity, int(price * 100)),
         )
         return "⚽ Partida aberta! Digite !vou para participar."
+
+    if command in {"!mensalista", "!mensalidade"}:
+        return manage_membership(db, group, args, confirm=command == "!mensalidade")
+
+    if command == "!financeiro" and args:
+        if len(args) != 1 or not valid_month(args[0]):
+            return "Use: !financeiro AAAA-MM"
+        return monthly_report(db, group, args[0])
 
     if command == "!frequencia":
         row = db.execute(
@@ -106,6 +119,7 @@ def handle(db, message, is_admin):
         return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
     mid = match["id"]
+    month = match["starts_at"][:7]
 
     rows = db.execute(
         """
@@ -262,6 +276,7 @@ def handle(db, message, is_admin):
     if command == "!valor":
         return (
             f"Valor por jogador de linha: R$ {match['price'] / 100:.2f}\n"
+            "Mensalidade: R$ 50.00 por mês calendário, sem reserva de vaga.\n"
             "Goleiros são isentos."
         )
     if command == "!paguei":
@@ -269,6 +284,13 @@ def handle(db, message, is_admin):
             return "Você precisa estar na lista de confirmados."
         if mine["exempt"]:
             return "Você está isento do pagamento desta partida."
+        plan = membership(db, group, player, month)
+        if plan:
+            if plan["payment"] == "paid":
+                return f"Sua mensalidade de {month} já foi confirmada."
+            db.execute("UPDATE memberships SET payment='declared' WHERE group_id=? AND player_id=? AND month=?",
+                       (group, player, month))
+            return f"Mensalidade de {month} informada. Aguardando confirmação do administrador."
         if mine["payment"] == "paid":
             return "Seu pagamento já foi confirmado."
         db.execute(
@@ -284,6 +306,8 @@ def handle(db, message, is_admin):
         if command == "!pagamento":
             if target["exempt"]:
                 return "Esse jogador está isento do pagamento."
+            if membership(db, group, target["player_id"], month):
+                return f"Este jogador é mensalista. Use !mensalidade {target['player_id']} {month}."
             db.execute(
                 "UPDATE registrations SET payment='paid' WHERE id=?", (target["id"],)
             )
@@ -295,10 +319,11 @@ def handle(db, message, is_admin):
         return "Registro atualizado."
 
     if command == "!financeiro":
+        plans = {row["player_id"]: membership(db, group, row["player_id"], month) for row in rows}
         paid = sum(row["payment"] == "paid" for row in rows)
 
         debtors = [
-            row for row in confirmed if not row["exempt"] and row["payment"] != "paid"
+            row for row in confirmed if not row["exempt"] and not plans[row["player_id"]] and row["payment"] != "paid"
         ]
 
         exempt_count = sum(bool(row["exempt"]) for row in confirmed)
@@ -307,6 +332,9 @@ def handle(db, message, is_admin):
 
         for row in rows:
             situation = "isento" if row["exempt"] else row["payment"]
+
+            if not row["exempt"] and plans[row["player_id"]]:
+                situation = f"mensalista {month}: {plans[row['player_id']]['payment']}"
 
             if row["exempt"] and row["payment"] == "paid":
                 situation = "isento, com pagamento anterior registrado"
@@ -320,6 +348,7 @@ def handle(db, message, is_admin):
             f"Pendente dos confirmados: "
             f"R$ {len(debtors) * match['price'] / 100:.2f}\n"
             f"Confirmados isentos: {exempt_count}\n" + "\n".join(details)
+            + "\n\n" + monthly_report(db, group, month)
         )
 
     if command == "!fechar":
