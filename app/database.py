@@ -23,6 +23,15 @@ exempt INTEGER NOT NULL DEFAULT 0
     CHECK(exempt IN (0, 1)),
  payment TEXT NOT NULL DEFAULT 'pending' CHECK(payment IN ('pending','declared','paid')),
  attended INTEGER CHECK(attended IN (0,1)), UNIQUE(match_id, player_id));
+ CREATE TABLE IF NOT EXISTS processed_messages (
+    group_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(group_id, message_id)
+);
 """
 
 
