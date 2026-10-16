@@ -33,10 +33,24 @@ def main():
                     timeout=60000,
                 )
 
-                print("WhatsApp Web aberto.")
-                print("Se aparecer um QR Code, autentique pelo celular.")
-                print("Aguarde suas conversas carregarem.")
-                print("Depois, pressione Enter aqui para encerrar.")
+                print("Aguarde as conversas carregarem.")
+                print("Se necessário, pesquise pelo grupo no WhatsApp Web.")
+                input("Com o grupo visível na lista, pressione Enter...")
+
+                group = page.get_by_text(
+                    "Mineiro Society Quinta19h",
+                    exact=True,
+                ).filter(has_not=page.locator("*"))
+
+                group = page.locator('span[title="Mineiro Society Quinta19h"]')
+
+                group.click(timeout=15000)
+
+                print("Clique no grupo realizado.")
+                input(
+                    "Confira se a conversa correta abriu. "
+                    "Pressione Enter para encerrar..."
+                )
 
                 input()
             finally:
