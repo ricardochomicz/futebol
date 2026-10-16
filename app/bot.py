@@ -167,24 +167,7 @@ def handle(db, message, is_admin):
     confirmed = [r for r in rows if r["status"] == "confirmed"]
     waiting = [r for r in rows if r["status"] == "waiting"]
     mine = next((r for r in rows if r["player_id"] == player), None)
-    if command == "!vou":
-        if match["status"] != "open":
-            return "As inscrições estão fechadas."
-        if mine and mine["status"] != "cancelled":
-            return "Você já está na lista."
-        status = "confirmed" if len(confirmed) < match["capacity"] else "waiting"
-        if mine:
-            # Rejoining goes to the end of the queue; preserve recorded payments.
-            db.execute("DELETE FROM registrations WHERE id=?", (mine["id"],))
-        db.execute(
-            "INSERT INTO registrations(match_id,player_id,status,payment) VALUES (?,?,?,?)",
-            (mid, player, status, mine["payment"] if mine else "pending"),
-        )
-        return (
-            "✅ Presença confirmada!"
-            if status == "confirmed"
-            else "Você entrou na fila de espera."
-        )
+
     if command == "!sair":
         if not mine or mine["status"] == "cancelled":
             return "Você não está inscrito."
@@ -200,24 +183,7 @@ def handle(db, message, is_admin):
             )
             return f"Inscrição cancelada. {promoted['name']} ({promoted['player_id']}) foi promovido da espera."
         return "Inscrição cancelada."
-    if command in {"!lista", "!espera"}:
-        selected = confirmed if command == "!lista" else waiting
-        title = (
-            f"⚽ {match['starts_at']} — {len(confirmed)}/{match['capacity']} confirmados"
-            if command == "!lista"
-            else "Fila de espera"
-        )
-        return (
-            title
-            + "\n"
-            + (
-                "\n".join(
-                    f"{i}. {r['name']} ({r['player_id']})"
-                    for i, r in enumerate(selected, 1)
-                )
-                or "Lista vazia."
-            )
-        )
+
     if command == "!valor":
         return f"Valor por jogador: R$ {match['price']/100:.2f}"
     if command == "!paguei":
