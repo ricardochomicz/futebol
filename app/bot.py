@@ -24,10 +24,18 @@ def handle(db, message, is_admin):
     args = parts[1:]
     if command in ADMIN and not is_admin:
         return "Apenas administradores podem executar esse comando."
+    name = message.name.strip() if message.name else ""
     db.execute(
-        "INSERT INTO players VALUES (?,?,?) ON CONFLICT(group_id,player_id) "
-        "DO UPDATE SET name=excluded.name",
-        (group, player, message.name or player),
+        """
+        INSERT INTO players (group_id, player_id, name)
+        VALUES (?, ?, ?)
+        ON CONFLICT(group_id, player_id)
+        DO UPDATE SET name = CASE
+            WHEN ? != '' THEN excluded.name
+            ELSE players.name
+        END
+        """,
+        (group, player, name or player, name),
     )
     match = db.execute(
         "SELECT * FROM matches WHERE group_id=? AND status!='finished'", (group,)
@@ -131,9 +139,7 @@ def handle(db, message, is_admin):
         exempt = int(role == "goalkeeper")
 
         capacity = (
-            match["goalkeeper_capacity"]
-            if role == "goalkeeper"
-            else match["capacity"]
+            match["goalkeeper_capacity"] if role == "goalkeeper" else match["capacity"]
         )
 
         occupied = sum(row["role"] == role for row in confirmed)
