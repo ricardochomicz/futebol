@@ -64,6 +64,7 @@ def handle(db, message, is_admin):
         return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
     if command in {"!vou", "!gol", "!lista", "!espera"}:
+        role = "goalkeeper" if command == "!gol" else "line"
         mid = match["id"]
 
         rows = db.execute(
