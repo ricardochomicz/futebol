@@ -32,7 +32,7 @@ def create_app(database_path=None):
         if key and not secrets.compare_digest(key.encode(), x_api_key.encode()):
             raise HTTPException(status_code=401, detail="Chave inválida")
         admins = {p.strip() for p in os.getenv("ADMIN_IDS", "").split(",") if p.strip()}
-                with transaction(api.state.database_path) as db:
+        with transaction(api.state.database_path) as db:
             if message.message_id is not None:
                 processed = db.execute(
                     """
