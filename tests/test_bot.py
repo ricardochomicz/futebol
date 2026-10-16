@@ -358,3 +358,78 @@ def test_concurrent_duplicate_message_creates_only_one_guest(client):
 
     listing = send(client, "!lista")
     assert listing.count("Rafael Concorrente") == 1
+
+
+def test_default_casual_price(client):
+    assert "aberta" in send(client, "!abrir 2026-10-01T20:00:00-03:00 18")
+    send(client, "!vou", "a")
+    assert "13.00" in send(client, "!valor", "a")
+    assert "Pendente dos confirmados: R$ 13.00" in send(client, "!financeiro")
+
+
+def test_monthly_payment_covers_five_matches_without_extra_charges(client):
+    send(client, "!lista", "a")  # Register a known player before opening a match.
+    assert "50.00" in send(client, "!mensalista a 2026-10")
+    assert "confirmada" in send(client, "!mensalidade a 2026-10")
+    assert "confirmada" in send(client, "!mensalidade a 2026-10")  # Idempotent.
+    for day in (1, 8, 15, 22, 29):
+        send(client, f"!abrir 2026-10-{day:02d}T20:00:00-03:00 1")
+        send(client, "!vou", "a")
+        assert "!mensalidade" in send(client, "!pagamento a")
+        assert "já foi confirmada" in send(client, "!paguei", "a")
+        report = send(client, "!financeiro")
+        assert "Recebido: R$ 0.00" in report
+        assert "Pendente dos confirmados: R$ 0.00" in report
+        assert "Recebido mensal: R$ 50.00" in report
+        send(client, "!presenca a")
+        send(client, "!encerrar")
+    assert "Recebido mensal: R$ 50.00" in send(client, "!financeiro 2026-10")
+    send(client, "!abrir 2026-11-05T20:00:00-03:00 18")
+    send(client, "!vou", "a")
+    assert "Pendente dos confirmados: R$ 13.00" in send(client, "!financeiro")
+
+
+def test_monthly_pending_declaration_and_no_priority(client):
+    send(client, "!lista", "a")
+    send(client, "!mensalista a 2026-10")
+    send(client, "!abrir 2026-10-22T20:00:00-03:00 1")
+    send(client, "!vou", "b")
+    assert "espera" in send(client, "!vou", "a")
+    assert "Pendente mensal: R$ 50.00" in send(client, "!financeiro")
+    send(client, "!sair", "b")
+    assert "Mensalidade" in send(client, "!paguei", "a")
+    assert "Pendente mensal: R$ 50.00" in send(client, "!financeiro")
+    send(client, "!mensalidade a 2026-10")
+    assert "Pendente mensal: R$ 0.00" in send(client, "!financeiro")
+
+
+def test_monthly_permissions_validation_and_group_isolation(client):
+    send(client, "!lista", "a")
+    assert "administradores" in send(client, "!mensalista a 2026-10", "a")
+    assert "administradores" in send(client, "!mensalidade a 2026-10", "a")
+    assert "Use:" in send(client, "!mensalista a 2026-13")
+    assert "Use:" in send(client, "!mensalista a 2026-1")
+    assert "não encontrado" in send(client, "!mensalista desconhecido 2026-10")
+    assert "Cadastre primeiro" in send(client, "!mensalidade a 2026-10")
+    send(client, "!mensalista a 2026-10")
+    assert "já é mensalista" in send(client, "!mensalista a 2026-10")
+    assert "Pendente mensal: R$ 0.00" in send(client, "!financeiro 2026-10", group="other")
+    assert "Pendente mensal: R$ 50.00" in send(client, "!financeiro 2026-10")
+
+
+def test_monthly_conversion_preserves_confirmed_casual_receipt(client):
+    send(client, "!abrir 2026-10-22T20:00:00-03:00 18")
+    send(client, "!vou", "a")
+    send(client, "!pagamento a")
+    assert "acerto" in send(client, "!mensalista a 2026-10")
+    assert "Recebido: R$ 13.00" in send(client, "!financeiro")
+    assert "Pendente mensal: R$ 0.00" in send(client, "!financeiro")
+
+
+def test_goalkeepers_remain_exempt_without_monthly_enrollment(client):
+    send(client, "!abrir 2026-10-22T20:00:00-03:00 18")
+    send(client, "!gol", "g1")
+    assert "isento" in send(client, "!paguei", "g1")
+    report = send(client, "!financeiro")
+    assert "Pendente dos confirmados: R$ 0.00" in report
+    assert "Pendente mensal: R$ 0.00" in report
