@@ -109,3 +109,35 @@ A partida só pode ser encerrada após todos esses registros.
 ```bash
 python -m pytest -q
 ```
+
+## Convidados que não participam do grupo
+
+Somente administradores podem inscrever convidados:
+
+```text
+!convidado linha Carlos Silva
+!convidado gol Pedro Santos
+```
+
+O bot retorna um ID `convidado-...`, também exibido na lista junto ao ID do
+administrador que cadastrou a pessoa. Guarde esse ID para administrar nomes iguais.
+Cada execução cria um novo convidado: confira a lista antes de repetir o comando.
+O cadastro é individual; em outra partida, um novo cadastro terá outro ID e histórico.
+
+Convidados respeitam as vagas e a fila da função escolhida. Goleiros são isentos.
+Inscrições fechadas impedem cadastrar novos convidados. Para administrar, use:
+
+```text
+!pagamento convidado-ID
+!presenca convidado-ID
+!falta convidado-ID
+!remover convidado-ID
+```
+
+Substitua `convidado-ID` pelo identificador retornado. A remoção cancela a inscrição
+na partida ativa do grupo e promove o primeiro da espera da mesma função.
+Ela preserva pagamentos registrados. `!remover` é restrito a convidados;
+participantes do grupo continuam usando `!sair`.
+
+O banco existente recebe automaticamente a coluna `players.invited_by` na próxima
+transação; os jogadores já cadastrados são preservados.
