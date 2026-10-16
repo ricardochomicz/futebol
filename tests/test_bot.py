@@ -197,3 +197,68 @@ def test_player_name_is_preserved(client):
 
     assert response.status_code == 200
     assert "Carlos (jogador-123)" in response.json()["reply"]
+
+
+def guest(client, role, name, group="g"):
+    reply = send(client, f"!convidado {role} {name}", group=group)
+    assert "ID: convidado-" in reply
+    return reply.split("ID: ")[1].strip()
+
+
+def test_guest_registration_payment_and_attendance(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 1 20")
+    send(client, "!vou")  # The administrator may already be registered.
+    identifier = guest(client, "linha", "Carlos Silva")
+    assert "Carlos Silva" in send(client, "!espera")
+    assert "convidado por admin" in send(client, "!espera")
+    assert identifier in send(client, "!sair")
+    assert "Registro atualizado" in send(client, f"!pagamento {identifier}")
+    assert "Recebido: R$ 20.00" in send(client, "!financeiro")
+    send(client, f"!presenca {identifier}")
+    assert "encerrada" in send(client, "!encerrar")
+
+
+def test_guest_goalkeeper_queue_and_removal(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 1 20")
+    send(client, "!vou", "a")
+    send(client, "!vou", "b")
+    first = guest(client, "gol", "Pedro Santos")
+    guest(client, "gol", "Pedro Santos")  # Same names have distinct IDs.
+    third = guest(client, "gol", "Outro Goleiro")
+    assert "isento" in send(client, f"!pagamento {first}")
+    assert third in send(client, f"!remover {first}")
+    assert third in send(client, "!lista")
+    assert "b (b)" in send(client, "!espera")
+    assert "não encontrado" in send(client, f"!remover {first}")
+
+
+def test_guest_permissions_validation_and_group_isolation(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+    assert "administradores" in send(client, "!convidado linha Carlos", "a")
+    assert "administradores" in send(client, "!remover qualquer", "a")
+    assert "Use:" in send(client, "!convidado linha")
+    assert "Use:" in send(client, "!convidado atacante Carlos")
+    assert "100 caracteres" in send(client, "!convidado linha " + "a" * 101)
+    identifier = guest(client, "linha", "Carlos")
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20", group="other")
+    assert "não encontrado" in send(client, f"!remover {identifier}", group="other")
+    assert "não encontrado" in send(client, "!remover admin")
+    send(client, "!fechar")
+    assert "fechadas" in send(client, "!convidado gol Pedro")
+    assert "cancelada" in send(client, f"!remover {identifier}")
+
+
+def test_guest_migration_preserves_existing_players(tmp_path):
+    import sqlite3
+    from app.database import transaction
+
+    path = str(tmp_path / "old.db")
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE players (group_id TEXT, player_id TEXT, name TEXT, "
+                   "PRIMARY KEY(group_id, player_id))")
+        db.execute("INSERT INTO players VALUES ('g','a','Carlos')")
+    for _ in range(2):
+        with transaction(path) as db:
+            row = db.execute("SELECT * FROM players").fetchone()
+            assert row["name"] == "Carlos"
+            assert row["invited_by"] is None
