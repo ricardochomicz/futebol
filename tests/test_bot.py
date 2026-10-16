@@ -162,3 +162,38 @@ def test_closed_match_blocks_goalkeeper_registration(client):
     listing = send(client, "!lista")
     assert "Goleiros — isentos: 0/2" in listing
     assert "g1 (g1)" not in listing
+
+
+def test_player_name_is_preserved(client):
+    send(client, "!abrir 2026-10-21T20:00:00-03:00 18 20")
+
+    response = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json={
+            "group_id": "g",
+            "player_id": "jogador-123",
+            "name": "Carlos",
+            "text": "!vou",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "confirmada" in response.json()["reply"]
+
+    listing = send(client, "!lista", "jogador-123")
+    assert "Carlos (jogador-123)" in listing
+
+    response = client.post(
+        "/messages",
+        headers={"x-api-key": "secret"},
+        json={
+            "group_id": "g",
+            "player_id": "jogador-123",
+            "name": "   ",
+            "text": "!lista",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Carlos (jogador-123)" in response.json()["reply"]
