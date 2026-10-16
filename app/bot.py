@@ -60,89 +60,118 @@ def handle(db, message, is_admin):
         )
         return "⚽ Partida aberta! Digite !vou para participar."
 
-    if command in {"!vou", "!gol", "!lista", "!espera"} and not match:
-        return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
+    if command == "!frequencia":
+        row = db.execute(
+            "SELECT COUNT(*) total, COALESCE(SUM(r.attended),0) present "
+            "FROM registrations r "
+            "JOIN matches m ON m.id=r.match_id "
+            "WHERE m.group_id=? AND r.player_id=? "
+            "AND m.status='finished' AND r.attended IS NOT NULL",
+            (group, player),
+        ).fetchone()
 
-    if command in {"!vou", "!gol", "!lista", "!espera"}:
-        mid = match["id"]
-
-        rows = db.execute(
-            """
-            SELECT r.*, p.name
-            FROM registrations AS r
-            JOIN players AS p
-              ON p.player_id = r.player_id
-             AND p.group_id = ?
-            WHERE r.match_id = ?
-            ORDER BY r.id
-            """,
-            (group, mid),
-        ).fetchall()
-
-        confirmed = [row for row in rows if row["status"] == "confirmed"]
-
-        waiting = [row for row in rows if row["status"] == "waiting"]
-
-        mine = next(
-            (row for row in rows if row["player_id"] == player),
-            None,
+        return (
+            f"Presenças: {row['present']}/{row['total']} "
+            "partidas com frequência registrada."
         )
 
-        if command in {"!vou", "!gol"}:
-            if match["status"] != "open":
-                return "As inscrições estão fechadas."
+    if (
+        command
+        not in {
+            "!vou",
+            "!gol",
+            "!sair",
+            "!lista",
+            "!espera",
+            "!valor",
+            "!paguei",
+        }
+        | ADMIN
+    ):
+        return HELP
 
-            if mine and mine["status"] != "cancelled":
-                return (
-                    "Você já está na lista. "
-                    "Para mudar de função, use !sair e se inscreva novamente."
-                )
+    if not match:
+        return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
-            role = "goalkeeper" if command == "!gol" else "line"
-            exempt = int(role == "goalkeeper")
+    mid = match["id"]
 
-            capacity = (
-                match["goalkeeper_capacity"]
-                if role == "goalkeeper"
-                else match["capacity"]
+    rows = db.execute(
+        """
+        SELECT r.*, p.name
+        FROM registrations AS r
+        JOIN players AS p
+          ON p.player_id = r.player_id
+         AND p.group_id = ?
+        WHERE r.match_id = ?
+        ORDER BY r.id
+        """,
+        (group, mid),
+    ).fetchall()
+
+    confirmed = [row for row in rows if row["status"] == "confirmed"]
+
+    waiting = [row for row in rows if row["status"] == "waiting"]
+
+    mine = next(
+        (row for row in rows if row["player_id"] == player),
+        None,
+    )
+
+    if command in {"!vou", "!gol"}:
+        if match["status"] != "open":
+            return "As inscrições estão fechadas."
+
+        if mine and mine["status"] != "cancelled":
+            return (
+                "Você já está na lista. "
+                "Para mudar de função, use !sair e se inscreva novamente."
             )
 
-            occupied = sum(row["role"] == role for row in confirmed)
+        role = "goalkeeper" if command == "!gol" else "line"
+        exempt = int(role == "goalkeeper")
 
-            status = "confirmed" if occupied < capacity else "waiting"
-            payment = mine["payment"] if mine else "pending"
+        capacity = (
+            match["goalkeeper_capacity"]
+            if role == "goalkeeper"
+            else match["capacity"]
+        )
 
-            if mine:
-                db.execute(
-                    "DELETE FROM registrations WHERE id = ?",
-                    (mine["id"],),
-                )
+        occupied = sum(row["role"] == role for row in confirmed)
 
+        status = "confirmed" if occupied < capacity else "waiting"
+        payment = mine["payment"] if mine else "pending"
+
+        if mine:
             db.execute(
-                """
-                INSERT INTO registrations (
-                    match_id,
-                    player_id,
-                    status,
-                    payment,
-                    role,
-                    exempt
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (mid, player, status, payment, role, exempt),
+                "DELETE FROM registrations WHERE id = ?",
+                (mine["id"],),
             )
 
-            if status == "confirmed":
-                if role == "goalkeeper":
-                    return "🧤 Presença confirmada como goleiro! Você está isento."
+        db.execute(
+            """
+            INSERT INTO registrations (
+                match_id,
+                player_id,
+                status,
+                payment,
+                role,
+                exempt
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (mid, player, status, payment, role, exempt),
+        )
 
-                return "✅ Presença confirmada!"
-
+        if status == "confirmed":
             if role == "goalkeeper":
-                return "Você entrou na fila de espera de goleiros."
+                return "🧤 Presença confirmada como goleiro! Você está isento."
 
-            return "Você entrou na fila de espera de jogadores de linha."
+            return "✅ Presença confirmada!"
+
+        if role == "goalkeeper":
+            return "Você entrou na fila de espera de goleiros."
+
+        return "Você entrou na fila de espera de jogadores de linha."
 
     if command in {"!lista", "!espera"}:
         selected = confirmed if command == "!lista" else waiting
@@ -173,32 +202,6 @@ def handle(db, message, is_admin):
             sections.append("\n".join(lines) if lines else "Lista vazia.")
 
         return "\n".join(sections)
-
-    if command == "!frequencia":
-        row = db.execute(
-            "SELECT COUNT(*) total, COALESCE(SUM(r.attended),0) present FROM registrations r "
-            "JOIN matches m ON m.id=r.match_id WHERE m.group_id=? AND r.player_id=? "
-            "AND m.status='finished' AND r.attended IS NOT NULL",
-            (group, player),
-        ).fetchone()
-        return f"Presenças: {row['present']}/{row['total']} partidas com frequência registrada."
-    if (
-        command
-        not in {"!vou", "!gol", "!sair", "!lista", "!espera", "!valor", "!paguei"}
-        | ADMIN
-    ):
-        return HELP
-    if not match:
-        return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
-    mid = match["id"]
-    rows = db.execute(
-        "SELECT r.*,p.name FROM registrations r JOIN players p ON "
-        "p.player_id=r.player_id AND p.group_id=? WHERE match_id=? ORDER BY r.id",
-        (group, mid),
-    ).fetchall()
-    confirmed = [r for r in rows if r["status"] == "confirmed"]
-    waiting = [r for r in rows if r["status"] == "waiting"]
-    mine = next((r for r in rows if r["player_id"] == player), None)
 
     if command == "!sair":
         if not mine or mine["status"] == "cancelled":
