@@ -60,10 +60,10 @@ def handle(db, message, is_admin):
         )
         return "⚽ Partida aberta! Digite !vou para participar."
 
-    if command in {"!vou", "!lista", "!espera"} and not match:
+    if command in {"!vou", "!gol", "!lista", "!espera"} and not match:
         return "⚽ Nenhuma partida ativa. Peça ao administrador para usar !abrir."
 
-    if command in {"!vou", "!lista", "!espera"}:
+    if command in {"!vou", "!gol", "!lista", "!espera"}:
         mid = match["id"]
 
         rows = db.execute(
