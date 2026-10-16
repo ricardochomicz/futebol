@@ -46,13 +46,18 @@ def main():
 
                 group.click(timeout=15000)
 
-                print("Clique no grupo realizado.")
+                print("Grupo aberto.")
+                print(
+                    "Envie pelo celular uma mensagem de teste: " "!lista TESTE-BOT-001"
+                )
                 input(
-                    "Confira se a conversa correta abriu. "
-                    "Pressione Enter para encerrar..."
+                    "Quando ela aparecer na conversa, "
+                    "pressione Enter para abrir o inspetor..."
                 )
 
-                input()
+                page.pause()
+
+                input("Pressione Enter para encerrar...")
             finally:
                 context.close()
 
