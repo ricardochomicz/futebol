@@ -166,10 +166,13 @@ no navegador. O seletor do nome visível está em `app/adapters/whatsapp_web.py`
 
 1. Na primeira execução, autentique pelo QR Code e aguarde as conversas carregarem.
 2. Deixe o grupo **Teste** visível na lista e pressione Enter no terminal.
-3. Peça ao outro participante para enviar `!lista TESTE-RECEBIDO-001`.
-4. Deixe a mensagem e seu autor visíveis; feche painéis de contato abertos.
-5. Pressione Enter. O programa clica no autor, lê o telefone candidato e envia
-   uma mensagem selecionada à API.
+3. Aguarde a conversa carregar e pressione Enter para iniciar a captura. O
+   programa registra os IDs já carregados para ignorá-los nesta execução.
+4. Somente depois de aparecer **Captura iniciada**, peça ao outro participante
+   para enviar um dos comandos: `!lista`, `!vou`, `!gol` ou `!sair`, sem argumentos.
+5. Deixe a nova mensagem e seu autor visíveis; feche painéis de contato e pressione
+   Enter no terminal. Não role o histórico durante a captura. O programa seleciona
+   o primeiro comando elegível, clica no autor, lê o telefone candidato e o envia à API.
 6. Se solicitar a chave, digite `BOT_API_KEY` do `.env`. Se a variável já estiver
    exportada nesse terminal, ela será reutilizada.
 7. Confira a resposta no terminal e pressione Enter para fechar o navegador.
@@ -181,16 +184,22 @@ Os padrões já são `http://127.0.0.1:8001` e `whatsapp-teste`; portanto, tamb�
 python -m app.adapters.whatsapp_web
 ```
 
-O protótipo processa **uma mensagem por execução**, com o texto de teste exato e
-um autor visível. Não monitora continuamente, não processa `!vou` automaticamente
-e, por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
+O protótipo processa **um comando por execução**, recebido de outro participante
+com autor visível. Aceita `!lista`, `!vou`, `!gol` e `!sair`, sem argumentos;
+o texto antigo `!lista TESTE-RECEBIDO-001` não é mais aceito. Comandos administrativos
+continuam disponíveis pelo terminal e pelo `/docs`.
+Não monitora continuamente; você ainda precisa pressionar Enter nos momentos
+indicados. Por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
 conforme descrito abaixo. A integração pelo navegador é experimental.
 Use uma conta e um grupo de teste.
 
 A sessão fica em `data/whatsapp-session`; não apague a pasta para reiniciar.
-Ao repetir um evento antigo, a deduplicação retorna sua resposta original. Para
-consultar uma partida aberta depois daquele evento, envie uma nova mensagem no
-WhatsApp, mesmo que o texto seja igual, e deixe o autor dela visível.
+As mensagens carregadas antes do início da captura são ignoradas. Envie uma nova
+mensagem após o aviso de captura em cada execução, mesmo que o texto seja igual.
+Isso não é um mecanismo de leitura de histórico: mensagens antigas carregadas
+mais tarde por rolagem não são identificadas com segurança como antigas; não role
+o histórico durante o piloto. Mensagens sem autor visível são ignoradas.
+A API mantém a deduplicação pelo ID original para eventos repetidos.
 
 ### Enviar uma resposta ao grupo de teste
 
@@ -223,8 +232,8 @@ Confira visualmente o grupo. Não apague o registro para forçar reenvio: ele é
 proteção contra duplicação. O registro é local a esta instalação; preserve o
 mesmo grupo interno e a pasta de dados entre execuções.
 
-Essa opção envia somente a resposta da mensagem selecionada. Ela não ativa
-leitura contínua nem processamento de outros comandos do WhatsApp. Sem
+Essa opção envia somente a resposta do comando selecionado entre `!lista`,
+`!vou`, `!gol` e `!sair`. Ela não ativa leitura contínua nem comandos administrativos. Sem
 `--send-reply`, o comportamento continua sendo mostrar a resposta no terminal.
 
 ### Encerrar

@@ -13,12 +13,13 @@ from playwright.sync_api import (
 
 from app.adapters.terminal import deliver
 from app.adapters.whatsapp_delivery import send_reply
+from app.adapters.whatsapp_messages import rejection_reason, select_new_command
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SESSION_DIR = PROJECT_ROOT / "data" / "whatsapp-session"
 OUTBOX_PATH = PROJECT_ROOT / "data" / "whatsapp-outbox.db"
-TEST_TEXT = "!lista TESTE-RECEBIDO-001"
 PHONE_PATTERN = re.compile(r"\+\d[\d\s()-]+")
+MESSAGE_SELECTOR = '[data-testid^="conv-msg-"][data-id]'
 
 
 def phone_candidates(texts):
@@ -33,7 +34,15 @@ def phone_candidates(texts):
     return candidates
 
 
-def inspect_test_message(page):
+def loaded_message_ids(page):
+    panel = page.get_by_test_id("conversation-panel-messages")
+    panel.wait_for(state="visible", timeout=15000)
+    return set(panel.locator(MESSAGE_SELECTOR).evaluate_all(
+        "elements => elements.map(element => element.getAttribute('data-id')).filter(Boolean)"
+    ))
+
+
+def inspect_command_message(page, initial_ids):
     drawer = page.get_by_test_id("chat-info-drawer")
     if drawer.is_visible():
         print("Feche o painel de contato antes de iniciar a identificação.")
@@ -41,28 +50,34 @@ def inspect_test_message(page):
 
     panel = page.get_by_test_id("conversation-panel-messages")
     panel.wait_for(state="visible", timeout=15000)
-    messages = panel.locator('[data-testid^="conv-msg-"][data-id]').filter(
-        has=page.get_by_test_id("selectable-text").filter(
-            has_text=re.compile(rf"^{re.escape(TEST_TEXT)}$")
-        )
-    )
-
-    # Only consider messages with their own visible author; never infer identity
-    # from a neighbouring message or a display-name lookup.
-    selected = None
-    for message in messages.all():
-        authors = message.get_by_test_id("author")
-        if message.is_visible() and authors.count() == 1 and authors.is_visible():
-            selected = message
-
-    if selected is None:
-        print("Nenhuma mensagem de teste carregada com autor visível.")
-        print("Peça uma nova mensagem ao participante e deixe o autor visível.")
+    records = panel.locator(MESSAGE_SELECTOR).evaluate_all("""elements => elements.map(element => {
+        const authors = element.querySelectorAll('[data-testid="author"]');
+        return {
+            message_id: element.getAttribute('data-id'),
+            texts: Array.from(element.querySelectorAll('[data-testid="selectable-text"]'))
+                .map(body => body.innerText),
+            author_count: authors.length,
+            author_visible: authors.length === 1 && authors[0].getClientRects().length > 0
+        };
+    })""")
+    candidate = select_new_command(records, initial_ids)
+    if candidate is None:
+        print("Nenhum comando novo elegível com autor visível.")
+        print("Aceitos: !lista, !vou, !gol e !sair, sem argumentos.")
+        print("Mensagens iniciais, agrupadas sem autor e comandos administrativos são ignorados.")
+        new_records = [record for record in records if record.get("message_id") not in initial_ids]
+        print(f"Mensagens carregadas: {len(records)}; IDs novos nesta captura: {len(new_records)}.")
+        for record in new_records[-5:]:
+            print(f"ID {record.get('message_id')}: {rejection_reason(record, initial_ids)}.")
+        print("Envie pela conta do OUTRO participante depois do aviso Captura iniciada.")
+        print("A mensagem precisa mostrar o nome do autor acima do texto; não basta o nome na mensagem anterior.")
         return
 
+    selected = panel.get_by_test_id(f"conv-msg-{candidate['message_id']}")
     message_id = selected.get_attribute("data-id")
     bodies = selected.get_by_test_id("selectable-text")
-    if not message_id or bodies.count() != 1 or bodies.inner_text().strip() != TEST_TEXT:
+    if (message_id != candidate["message_id"] or bodies.count() != 1
+            or bodies.inner_text().strip() != candidate["text"]):
         print("Estrutura da mensagem ambígua. Identificação interrompida.")
         return
 
@@ -98,7 +113,7 @@ def inspect_test_message(page):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Encaminha uma mensagem de teste do WhatsApp à API local."
+        description="Encaminha um comando recebido no grupo Teste à API local."
     )
     parser.add_argument("--api-url", default="http://127.0.0.1:8001")
     parser.add_argument("--group-id", default="whatsapp-teste")
@@ -140,14 +155,18 @@ def main():
                 group.click(timeout=15000)
 
                 print("Grupo aberto.")
-                print(f"Peça ao outro participante para enviar: {TEST_TEXT}")
+                input("Aguarde a conversa carregar e pressione Enter para iniciar a captura...")
+                initial_ids = loaded_message_ids(page)
+                print("Captura iniciada. As mensagens já carregadas serão ignoradas.")
+                print("Agora peça ao outro participante para enviar: !lista, !vou, !gol ou !sair.")
+                print("Envie um comando por execução, sem argumentos. Não role o histórico durante a captura.")
                 print("Deixe a mensagem e o nome do autor visíveis e feche painéis de contato.")
                 input(
                     "Quando ela aparecer na conversa, "
                     "pressione Enter para identificar o remetente..."
                 )
 
-                message = inspect_test_message(page)
+                message = inspect_command_message(page, initial_ids)
                 if message is not None:
                     message["group_id"] = args.group_id
                     api_key = os.getenv("BOT_API_KEY", "") or getpass("Chave da API: ")
