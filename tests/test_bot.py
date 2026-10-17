@@ -433,3 +433,39 @@ def test_goalkeepers_remain_exempt_without_monthly_enrollment(client):
     report = send(client, "!financeiro")
     assert "Pendente dos confirmados: R$ 0.00" in report
     assert "Pendente mensal: R$ 0.00" in report
+
+
+@pytest.mark.parametrize(
+    "current, expected",
+    [
+        ("2026-10-19T10:00:00-03:00", "2026-10-22T19:00:00-03:00"),
+        ("2026-10-22T18:59:59-03:00", "2026-10-22T19:00:00-03:00"),
+        ("2026-10-22T19:00:00-03:00", "2026-10-29T19:00:00-03:00"),
+        ("2026-10-23T09:00:00-03:00", "2026-10-29T19:00:00-03:00"),
+        ("2026-12-31T20:00:00-03:00", "2027-01-07T19:00:00-03:00"),
+        ("2026-10-22T22:00:00+00:00", "2026-10-29T19:00:00-03:00"),
+    ],
+)
+def test_next_thursday_schedule(current, expected):
+    from datetime import datetime
+    from app.bot import next_match_start
+
+    assert next_match_start(datetime.fromisoformat(current)).isoformat() == expected
+
+
+def test_short_open_command_uses_weekly_defaults(client, monkeypatch):
+    from datetime import datetime
+
+    monkeypatch.setattr(
+        "app.bot.next_match_start",
+        lambda: datetime.fromisoformat("2026-10-22T19:00:00-03:00"),
+    )
+    assert "administradores" in send(client, "!abrir", "a")
+    reply = send(client, "!abrir")
+    assert "22/10/2026 às 19:00" in reply
+    assert "Avulso: R$ 13.00" in reply
+    listing = send(client, "!lista")
+    assert "2026-10-22T19:00:00-03:00" in listing
+    assert "Linha: 0/18" in listing
+    assert "Goleiros — isentos: 0/2" in listing
+    assert "Já existe" in send(client, "!abrir")

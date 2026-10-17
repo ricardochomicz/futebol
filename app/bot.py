@@ -1,12 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from app.billing import CASUAL_PRICE, manage_membership, membership, monthly_report, valid_month
 
 HELP = (
     "Comandos: !vou, !gol, !sair, !lista, !espera, !valor, !paguei, !frequencia. "
-    "Admin: !abrir DATA_ISO VAGAS [VALOR_AVULSO], !fechar, !pagamento ID, "
+    "Admin: !abrir (próxima quinta às 19h), !fechar, !pagamento ID, "
     "!presenca ID, !falta ID, !financeiro, !encerrar, "
     "!convidado linha|gol NOME, !remover ID, "
     "!mensalista ID AAAA-MM, !mensalidade ID AAAA-MM, !financeiro [AAAA-MM]."
@@ -24,6 +25,18 @@ ADMIN = {
     "!financeiro",
     "!encerrar",
 }
+
+
+def next_match_start(now=None):
+    timezone = ZoneInfo("America/Sao_Paulo")
+    now = datetime.now(timezone) if now is None else now.astimezone(timezone)
+    days = (3 - now.weekday()) % 7
+    starts_at = (now + timedelta(days=days)).replace(
+        hour=19, minute=0, second=0, microsecond=0
+    )
+    if starts_at <= now:
+        starts_at += timedelta(days=7)
+    return starts_at
 
 
 def handle(db, message, is_admin):
@@ -53,13 +66,21 @@ def handle(db, message, is_admin):
         if match:
             return "Já existe uma partida ativa neste grupo."
         try:
-            if len(args) not in {2, 3}:
+            if not args:
+                date = next_match_start()
+                capacity = 18
+                price = Decimal(CASUAL_PRICE) / 100
+            elif len(args) in {2, 3}:
+                date = datetime.fromisoformat(args[0])
+                if date.tzinfo is None:
+                    raise ValueError
+                capacity = int(args[1])
+                price = (
+                    Decimal(args[2].replace(",", "."))
+                    if len(args) == 3 else Decimal(CASUAL_PRICE) / 100
+                )
+            else:
                 raise ValueError
-            date = datetime.fromisoformat(args[0])
-            if date.tzinfo is None:
-                raise ValueError
-            capacity = int(args[1])
-            price = Decimal(args[2].replace(",", ".")) if len(args) == 3 else Decimal(CASUAL_PRICE) / 100
             if (
                 capacity < 1
                 or capacity > 18
@@ -70,12 +91,17 @@ def handle(db, message, is_admin):
             ):
                 raise ValueError
         except (ValueError, InvalidOperation):
-            return "Use: !abrir 2026-10-21T20:00:00-03:00 18 [13.00]"
+            return "Use: !abrir ou !abrir DATA_ISO VAGAS [VALOR_AVULSO]"
         db.execute(
             "INSERT INTO matches(group_id,starts_at,capacity,price,status) VALUES (?,?,?,?,'open')",
             (group, date.isoformat(), capacity, int(price * 100)),
         )
-        return "⚽ Partida aberta! Digite !vou para participar."
+        return (
+            f"⚽ Partida aberta! {date:%d/%m/%Y às %H:%M} ({date:%z}).\n"
+            f"Linha: {capacity} vagas | Goleiros: 2 vagas\n"
+            f"Avulso: R$ {price:.2f} | Mensalidade: R$ 50.00\n"
+            "Digite !vou para linha ou !gol para goleiro."
+        )
 
     if command in {"!mensalista", "!mensalidade"}:
         return manage_membership(db, group, args, confirm=command == "!mensalidade")
