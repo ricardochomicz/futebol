@@ -63,6 +63,10 @@ def inspect_command_message(page, initial_ids):
         };
     })""")
     candidate = select_new_command(records, initial_ids)
+    manual_contact = False
+    if candidate is None:
+        candidate = select_new_command(records, initial_ids, require_author=False)
+        manual_contact = candidate is not None
     if candidate is None:
         print("Nenhum comando novo elegível com autor visível.")
         print("Aceitos: !lista, !vou, !gol e !sair, sem argumentos.")
@@ -92,9 +96,17 @@ def inspect_command_message(page, initial_ids):
         return
 
     text = bodies.inner_text().strip()
-    author = selected.get_by_test_id("author")
-    display_name = author.inner_text().strip()
-    author.click(timeout=15000)
+    display_name = None
+    if manual_contact:
+        print(f"\nComando encontrado: {text} | ID: {message_id}")
+        print("O HTML não permite identificar automaticamente o remetente desta mensagem.")
+        print("Abra os dados do remetente pelo grupo e deixe o telefone visível.")
+        print("Não selecione pelo nome de outra mensagem sem conferir quem enviou este comando.")
+        input("Com os dados do remetente correto abertos, pressione Enter...")
+    else:
+        author = selected.get_by_test_id("author")
+        display_name = author.inner_text().strip()
+        author.click(timeout=15000)
 
     drawer.wait_for(state="visible", timeout=15000)
     fields = drawer.get_by_test_id("selectable-text")
@@ -110,9 +122,15 @@ def inspect_command_message(page, initial_ids):
     print("\nVínculo candidato da mensagem selecionada:")
     print(f"ID da mensagem: {message_id}")
     print(f"Texto: {text}")
-    print(f"Autor exibido: {display_name}")
+    if display_name:
+        print(f"Autor exibido: {display_name}")
     phone = candidates.pop()
     print(f"Telefone candidato: {phone}")
+    if manual_contact:
+        confirmed = input(f"Esse telefone pertence a quem enviou {text}? [s/N] ").strip().lower()
+        if confirmed != "s":
+            print("Identificação cancelada. O comando não foi enviado à API.")
+            return
     return {
         "message_id": message_id,
         "player_id": phone,

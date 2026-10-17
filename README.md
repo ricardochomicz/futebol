@@ -184,8 +184,11 @@ Os padrões já são `http://127.0.0.1:8001` e `whatsapp-teste`; portanto, tamb�
 python -m app.adapters.whatsapp_web
 ```
 
-O protótipo processa **um comando por execução**, recebido de outro participante
-com autor visível. Aceita `!lista`, `!vou`, `!gol` e `!sair`, sem argumentos;
+O protótipo processa **um comando por execução**. Com autor visível, ele abre
+o contato automaticamente. Sem autor no HTML, solicita identificação manual do
+remetente: abra os dados do contato pelo grupo, deixe o telefone visível e confirme
+se pertence à pessoa que enviou o comando. Recusar cancela antes de chamar a API.
+Esse caminho assistido não infere identidade pelo nome nem pela mensagem anterior. Aceita `!lista`, `!vou`, `!gol` e `!sair`, sem argumentos;
 o texto antigo `!lista TESTE-RECEBIDO-001` não é mais aceito. Comandos administrativos
 continuam disponíveis pelo terminal e pelo `/docs`.
 Não monitora continuamente; você ainda precisa pressionar Enter nos momentos
@@ -198,7 +201,7 @@ As mensagens carregadas antes do início da captura são ignoradas. Envie uma no
 mensagem após o aviso de captura em cada execução, mesmo que o texto seja igual.
 Isso não é um mecanismo de leitura de histórico: mensagens antigas carregadas
 mais tarde por rolagem não são identificadas com segurança como antigas; não role
-o histórico durante o piloto. Mensagens sem autor visível são ignoradas.
+o histórico durante o piloto. Mensagens sem autor visível exigem identificação manual pelo operador.
 A API mantém a deduplicação pelo ID original para eventos repetidos.
 
 ### Enviar uma resposta ao grupo de teste
@@ -257,7 +260,7 @@ Os dados permanecem no SQLite após encerrar os programas.
 | Navegador informa sessão existente | Encerre a execução anterior do adaptador e sua janela Chromium; não use duas instâncias com o mesmo perfil. |
 | Nenhuma partida ativa | Abra a partida no mesmo `group_id` consultado. |
 | Resposta antiga ao repetir mensagem | Envie um evento novo; a resposta anterior fica armazenada por ID. |
-| Mensagem sem autor visível | Deixe uma mensagem com autor carregada; o protótipo não infere o remetente de mensagens agrupadas. |
+| Mensagem sem autor visível | Siga o caminho assistido: abra os dados do remetente correto e confirme o telefone. O protótipo não infere o remetente de mensagens agrupadas. |
 
 ## Arquitetura e próximos passos
 

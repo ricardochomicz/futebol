@@ -41,3 +41,17 @@ def test_diagnostics_distinguish_old_missing_author_and_hidden_author():
     assert "não está visível" in rejection_reason(message(author_visible=False), set())
     assert "argumentos" in rejection_reason(message(text="!vou teste"), set())
     assert rejection_reason(message(), set()) is None
+
+
+def test_manual_contact_mode_selects_command_without_inferring_identity():
+    record = message(author_count=0, author_visible=False)
+    assert select_new_command([record], set()) is None
+    assert select_new_command([record], set(), require_author=False) == {
+        "message_id": "new", "text": "!vou",
+    }
+
+
+def test_manual_contact_mode_still_rejects_old_and_invalid_messages():
+    assert select_new_command([message("old", author_count=0)], {"old"}, require_author=False) is None
+    assert select_new_command([message(text="!abrir")], set(), require_author=False) is None
+    assert select_new_command([message(texts=["!vou", "citação"])], set(), require_author=False) is None

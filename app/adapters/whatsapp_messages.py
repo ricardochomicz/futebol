@@ -3,7 +3,7 @@
 SUPPORTED_COMMANDS = frozenset({"!lista", "!vou", "!gol", "!sair"})
 
 
-def rejection_reason(message, initial_ids):
+def rejection_reason(message, initial_ids, require_author=True):
     identifier = message.get("message_id")
     if not identifier:
         return "mensagem sem ID"
@@ -15,17 +15,17 @@ def rejection_reason(message, initial_ids):
     text = bodies[0]
     if not isinstance(text, str) or text.strip().lower() not in SUPPORTED_COMMANDS:
         return "texto não é um dos quatro comandos aceitos, sem argumentos"
-    if message.get("author_count") != 1:
+    if require_author and message.get("author_count") != 1:
         return "sem autor único; pode ser mensagem própria ou agrupada"
-    if not message.get("author_visible"):
+    if require_author and not message.get("author_visible"):
         return "autor não está visível"
     return None
 
 
-def select_new_command(messages, initial_ids):
+def select_new_command(messages, initial_ids, require_author=True):
     """Escolhe o primeiro comando elegível na ordem das mensagens carregadas."""
     for message in messages:
-        if rejection_reason(message, initial_ids) is not None:
+        if rejection_reason(message, initial_ids, require_author=require_author) is not None:
             continue
         return {"message_id": message["message_id"], "text": message["texts"][0].strip()}
     return None
