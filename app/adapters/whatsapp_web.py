@@ -56,6 +56,8 @@ def inspect_command_message(page, initial_ids):
             message_id: element.getAttribute('data-id'),
             texts: Array.from(element.querySelectorAll('[data-testid="selectable-text"]'))
                 .map(body => body.innerText),
+            text_contents: Array.from(element.querySelectorAll('[data-testid="selectable-text"]'))
+                .map(body => body.textContent),
             author_count: authors.length,
             author_visible: authors.length === 1 && authors[0].getClientRects().length > 0
         };
@@ -69,6 +71,14 @@ def inspect_command_message(page, initial_ids):
         print(f"Mensagens carregadas: {len(records)}; IDs novos nesta captura: {len(new_records)}.")
         for record in new_records[-5:]:
             print(f"ID {record.get('message_id')}: {rejection_reason(record, initial_ids)}.")
+            for index, text in enumerate(record.get("texts", [])[:3], start=1):
+                print(f"  Texto lido {index}: {ascii(text[:160]) if isinstance(text, str) else repr(text)}")
+            for index, text in enumerate(record.get("text_contents", [])[:3], start=1):
+                print(f"  textContent {index}: {ascii(text[:160]) if isinstance(text, str) else repr(text)}")
+            print(
+                f"  Autores encontrados: {record.get('author_count')}; "
+                f"autor visível: {record.get('author_visible')}."
+            )
         print("Envie pela conta do OUTRO participante depois do aviso Captura iniciada.")
         print("A mensagem precisa mostrar o nome do autor acima do texto; não basta o nome na mensagem anterior.")
         return
