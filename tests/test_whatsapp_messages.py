@@ -1,6 +1,6 @@
 import pytest
 
-from app.adapters.whatsapp_messages import rejection_reason, select_new_command, wait_for_new_command
+from app.adapters.whatsapp_messages import normalize_self_phone, rejection_reason, select_new_command, wait_for_new_command
 
 
 def message(identifier="new", text="!vou", **changes):
@@ -83,3 +83,13 @@ def test_watch_stops_before_scanning_if_chat_changes():
         wait_for_new_command(scan, set(), pause, check)
     scan.assert_not_called()
     pause.assert_not_called()
+
+
+def test_own_account_phone_normalization():
+    assert normalize_self_phone(" +55 (11) 90000-0000 ") == "+5511900000000"
+
+
+@pytest.mark.parametrize("value", ["admin", "5511900000000", "+123", "+" + "1" * 16, "+55 outro contato"])
+def test_invalid_own_account_phone_is_rejected(value):
+    with pytest.raises(ValueError, match="telefone"):
+        normalize_self_phone(value)

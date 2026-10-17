@@ -1,6 +1,16 @@
 """Seleção de comandos do piloto, sem inferir remetentes pelo nome."""
 
+import re
+
 SUPPORTED_COMMANDS = frozenset({"!lista", "!vou", "!gol", "!sair"})
+
+
+def normalize_self_phone(value):
+    value = value.strip()
+    digits = re.sub(r"\D", "", value)
+    if not re.fullmatch(r"\+\d[\d\s()-]+", value) or not 8 <= len(digits) <= 15:
+        raise ValueError("Informe seu telefone com +, código do país, DDD e número.")
+    return f"+{digits}"
 
 
 def rejection_reason(message, initial_ids, require_author=True):

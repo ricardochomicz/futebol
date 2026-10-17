@@ -209,6 +209,23 @@ mais tarde por rolagem não são identificadas com segurança como antigas; não
 o histórico durante o piloto. Mensagens sem autor visível exigem identificação manual pelo operador.
 A API mantém a deduplicação pelo ID original para eventos repetidos.
 
+### Comandos enviados pela própria conta
+
+Mensagens enviadas pela conta conectada podem não ter autor no HTML. Quando o
+programa encontrar o comando e pedir os dados do remetente, digite `/eu` no
+terminal. Informe o telefone da conta conectada com `+`, código do país, DDD e
+número; confira o número mostrado e confirme com `s`. Não precisa abrir o painel
+de contato nesse caminho. A identidade é declarada pelo operador, não detectada
+automaticamente. Use `/eu` somente para mensagens que você enviou.
+
+Opcionalmente, informe o telefone ao iniciar com `--self-phone` para não digitá-lo
+em cada identificação. O argumento exige formato internacional. Ele só é usado
+quando você escolhe `/eu`, nunca para atribuir mensagens de outros participantes.
+
+O telefone é o `player_id`: a inscrição não é automaticamente vinculada ao ID
+`admin` usado no simulador. Isso não concede privilégios administrativos e os
+comandos administrativos continuam indisponíveis no piloto WhatsApp.
+
 ### Detectar novos comandos sem pressionar Enter
 
 Com a API rodando:
