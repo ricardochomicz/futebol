@@ -4,7 +4,6 @@ import re
 import sqlite3
 from getpass import getpass
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 
 from playwright.sync_api import (
     Error as PlaywrightError,
@@ -12,8 +11,9 @@ from playwright.sync_api import (
 )
 
 from app.adapters.terminal import deliver
-from app.adapters.whatsapp_delivery import send_reply
+from app.adapters.whatsapp_delivery import send_reply, verify_chat
 from app.adapters.whatsapp_messages import rejection_reason, select_new_command
+from app.adapters.whatsapp_session import run_session
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SESSION_DIR = PROJECT_ROOT / "data" / "whatsapp-session"
@@ -47,6 +47,7 @@ def inspect_command_message(page, initial_ids):
     if drawer.is_visible():
         print("Feche o painel de contato antes de iniciar a identificação.")
         return
+    verify_chat(page, "Teste")
 
     panel = page.get_by_test_id("conversation-panel-messages")
     panel.wait_for(state="visible", timeout=15000)
@@ -62,15 +63,15 @@ def inspect_command_message(page, initial_ids):
             author_visible: authors.length === 1 && authors[0].getClientRects().length > 0
         };
     })""")
-    candidate = select_new_command(records, initial_ids)
+    candidate = select_new_command(records, initial_ids, require_author=False)
     manual_contact = False
+    if candidate is not None:
+        record = next(row for row in records if row["message_id"] == candidate["message_id"])
+        manual_contact = select_new_command([record], initial_ids) is None
     if candidate is None:
-        candidate = select_new_command(records, initial_ids, require_author=False)
-        manual_contact = candidate is not None
-    if candidate is None:
-        print("Nenhum comando novo elegível com autor visível.")
+        print("Nenhum comando novo elegível entre as mensagens carregadas.")
         print("Aceitos: !lista, !vou, !gol e !sair, sem argumentos.")
-        print("Mensagens iniciais, agrupadas sem autor e comandos administrativos são ignorados.")
+        print("Mensagens iniciais e comandos administrativos são ignorados.")
         new_records = [record for record in records if record.get("message_id") not in initial_ids]
         print(f"Mensagens carregadas: {len(records)}; IDs novos nesta captura: {len(new_records)}.")
         for record in new_records[-5:]:
@@ -84,7 +85,7 @@ def inspect_command_message(page, initial_ids):
                 f"autor visível: {record.get('author_visible')}."
             )
         print("Envie pela conta do OUTRO participante depois do aviso Captura iniciada.")
-        print("A mensagem precisa mostrar o nome do autor acima do texto; não basta o nome na mensagem anterior.")
+        print("Se o próximo comando não tiver autor visível, será solicitada identificação assistida.")
         return
 
     selected = panel.get_by_test_id(f"conv-msg-{candidate['message_id']}")
@@ -187,44 +188,24 @@ def main():
                 initial_ids = loaded_message_ids(page)
                 print("Captura iniciada. As mensagens já carregadas serão ignoradas.")
                 print("Agora peça ao outro participante para enviar: !lista, !vou, !gol ou !sair.")
-                print("Envie um comando por execução, sem argumentos. Não role o histórico durante a captura.")
+                print("Envie um comando por vez, sem argumentos. Não role o histórico durante a captura.")
                 print("Deixe a mensagem e o nome do autor visíveis e feche painéis de contato.")
-                input(
-                    "Quando ela aparecer na conversa, "
-                    "pressione Enter para identificar o remetente..."
+                run_session(
+                    initial_ids=initial_ids,
+                    group_id=args.group_id,
+                    api_url=args.api_url,
+                    api_key=os.getenv("BOT_API_KEY", ""),
+                    inspect_message=lambda ignored: inspect_command_message(page, ignored),
+                    deliver=deliver,
+                    send_response=(
+                        lambda message, reply: send_reply(
+                            page, OUTBOX_PATH, args.group_id,
+                            message["message_id"], "Teste", reply,
+                        )
+                    ) if args.send_reply else None,
+                    read_key=getpass,
+                    browser_errors=(PlaywrightError, sqlite3.Error, ValueError),
                 )
-
-                message = inspect_command_message(page, initial_ids)
-                if message is not None:
-                    message["group_id"] = args.group_id
-                    api_key = os.getenv("BOT_API_KEY", "") or getpass("Chave da API: ")
-                    try:
-                        reply = deliver(args.api_url, api_key, message)
-                    except HTTPError as error:
-                        detail = error.read().decode("utf-8", errors="replace")
-                        print(f"Erro HTTP {error.code}: {detail}")
-                    except (URLError, TimeoutError, OSError) as error:
-                        print(f"Falha de conexão com a API: {error}")
-                        print("Ao repetir esta mensagem, mantenha o mesmo ID para deduplicação.")
-                    except (ValueError, KeyError) as error:
-                        print(f"Resposta inesperada da API: {error}")
-                    else:
-                        print(f"\nResposta da API (grupo {args.group_id}):")
-                        print(reply)
-                        if args.send_reply:
-                            input("Feche o painel de contato, confira o grupo Teste e pressione Enter para enviar...")
-                            try:
-                                print(send_reply(
-                                    page, OUTBOX_PATH, args.group_id,
-                                    message["message_id"], "Teste", reply,
-                                ))
-                            except (PlaywrightError, ValueError, OSError, sqlite3.Error) as error:
-                                print(f"Envio interrompido: {error}")
-                                print("Confira o grupo antes de tentar novamente; não há reenvio automático.")
-                        else:
-                            print("A resposta não foi enviada ao WhatsApp. Use --send-reply para ativar o envio controlado.")
-
-                input("Pressione Enter para encerrar...")
             finally:
                 context.close()
 

@@ -465,7 +465,8 @@ def test_short_open_command_uses_weekly_defaults(client, monkeypatch):
     assert "22/10/2026 às 19:00" in reply
     assert "Avulso: R$ 13.00" in reply
     listing = send(client, "!lista")
-    assert "2026-10-22T19:00:00-03:00" in listing
+    assert listing.splitlines()[0] == "⚽ Fut Arena Mineiro 19hrs 22/10/2026"
+    assert send(client, "!espera").splitlines()[0] == "⚽ Fut Arena Mineiro 19hrs 22/10/2026"
     assert "Linha: 0/18" in listing
     assert "Goleiros — isentos: 0/2" in listing
     assert "Já existe" in send(client, "!abrir")

@@ -175,7 +175,10 @@ no navegador. O seletor do nome visível está em `app/adapters/whatsapp_web.py`
    o primeiro comando elegível, clica no autor, lê o telefone candidato e o envia à API.
 6. Se solicitar a chave, digite `BOT_API_KEY` do `.env`. Se a variável já estiver
    exportada nesse terminal, ela será reutilizada.
-7. Confira a resposta no terminal e pressione Enter para fechar o navegador.
+7. Confira a resposta. Com `--send-reply`, feche o painel do contato e siga o
+   pedido de envio. Sem a opção, a resposta fica somente no terminal.
+8. O navegador permanece aberto: envie outro comando e pressione Enter no
+   próximo pedido. Para encerrar a sessão, digite `/sair` no terminal.
 
 Os padrões já são `http://127.0.0.1:8001` e `whatsapp-teste`; portanto, também
 é possível executar apenas:
@@ -184,25 +187,46 @@ Os padrões já são `http://127.0.0.1:8001` e `whatsapp-teste`; portanto, tamb�
 python -m app.adapters.whatsapp_web
 ```
 
-O protótipo processa **um comando por execução**. Com autor visível, ele abre
+O protótipo processa **um comando por vez, mantendo o navegador aberto**. Com autor visível, ele abre
 o contato automaticamente. Sem autor no HTML, solicita identificação manual do
 remetente: abra os dados do contato pelo grupo, deixe o telefone visível e confirme
 se pertence à pessoa que enviou o comando. Recusar cancela antes de chamar a API.
 Esse caminho assistido não infere identidade pelo nome nem pela mensagem anterior. Aceita `!lista`, `!vou`, `!gol` e `!sair`, sem argumentos;
 o texto antigo `!lista TESTE-RECEBIDO-001` não é mais aceito. Comandos administrativos
 continuam disponíveis pelo terminal e pelo `/docs`.
-Não monitora continuamente; você ainda precisa pressionar Enter nos momentos
-indicados. Por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
+A sessão é assistida: você ainda precisa pressionar Enter para buscar o próximo
+comando e para enviar a resposta. Não há monitoramento autônomo em segundo plano. Por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
 conforme descrito abaixo. A integração pelo navegador é experimental.
 Use uma conta e um grupo de teste.
 
 A sessão fica em `data/whatsapp-session`; não apague a pasta para reiniciar.
 As mensagens carregadas antes do início da captura são ignoradas. Envie uma nova
-mensagem após o aviso de captura em cada execução, mesmo que o texto seja igual.
+mensagem após o aviso de captura. IDs processados também são ignorados nos ciclos
+seguintes da mesma sessão, mesmo que permaneçam visíveis.
 Isso não é um mecanismo de leitura de histórico: mensagens antigas carregadas
 mais tarde por rolagem não são identificadas com segurança como antigas; não role
 o histórico durante o piloto. Mensagens sem autor visível exigem identificação manual pelo operador.
 A API mantém a deduplicação pelo ID original para eventos repetidos.
+
+### Comandos sucessivos e recuperação de falhas
+
+A sessão mantém o navegador aberto e pede a chave uma única vez, ou utiliza
+`BOT_API_KEY` exportada. Após HTTP 401, permite informar uma chave corrigida.
+
+- Enter: procura o próximo comando, ou repete uma tentativa pendente.
+- `/sair`: encerra a sessão e fecha o navegador.
+- `/pular`: descarta a pendência nesta sessão, sem desfazer alterações já feitas na API.
+
+Se a API falhar, o ID, texto e telefone ficam preservados em memória para repetir
+a mesma mensagem, sem identificar outro contato. Depois que a API respondeu,
+uma falha de envio mantém a resposta em memória: uma repetição não executa de
+novo o comando. O registro local de tentativas continua bloqueando reenvios
+incertos. Esses dados em memória não sobrevivem ao encerramento do programa.
+
+Os comandos são selecionados na ordem das mensagens carregadas, inclusive se o
+primeiro exigir identificação assistida. Envie e acompanhe um comando por vez.
+Feche o painel do contato antes de procurar o próximo. O nome do grupo no
+cabeçalho deve continuar sendo Teste.
 
 ### Enviar uma resposta ao grupo de teste
 
@@ -242,7 +266,7 @@ Essa opção envia somente a resposta do comando selecionado entre `!lista`,
 ### Encerrar
 
 - Adaptador de terminal: `/sair`.
-- Adaptador WhatsApp: Enter no pedido final.
+- Adaptador WhatsApp: `/sair` no pedido de próximo comando ou de envio; `Ctrl+C` também encerra.
 - API: `Ctrl+C` no Terminal 1.
 
 Os dados permanecem no SQLite após encerrar os programas.
@@ -298,6 +322,14 @@ Cada grupo pode ter uma partida ativa por vez.
   e promoções de quem já está na espera.
 
 ### Comandos dos jogadores
+
+As respostas de `!lista` e `!espera` usam data brasileira no título:
+
+```text
+⚽ Fut Arena Mineiro 19hrs 22/10/2026
+```
+
+A data exibida corresponde à partida cadastrada; o banco mantém o formato ISO.
 
 | Comando | Ação |
 |---|---|

@@ -55,3 +55,8 @@ def test_manual_contact_mode_still_rejects_old_and_invalid_messages():
     assert select_new_command([message("old", author_count=0)], {"old"}, require_author=False) is None
     assert select_new_command([message(text="!abrir")], set(), require_author=False) is None
     assert select_new_command([message(texts=["!vou", "citação"])], set(), require_author=False) is None
+
+
+def test_assisted_mode_keeps_order_even_when_first_command_has_no_author():
+    records = [message("join", "!vou", author_count=0), message("leave", "!sair")]
+    assert select_new_command(records, set(), require_author=False)["message_id"] == "join"

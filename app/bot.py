@@ -246,9 +246,10 @@ def handle(db, message, is_admin):
 
     if command in {"!lista", "!espera"}:
         selected = confirmed if command == "!lista" else waiting
+        match_date = datetime.fromisoformat(match["starts_at"]).strftime("%d/%m/%Y")
 
         sections = [
-            f"⚽ {match['starts_at']}",
+            f"⚽ Fut Arena Mineiro 19hrs {match_date}",
             "Confirmados" if command == "!lista" else "Fila de espera",
         ]
 
