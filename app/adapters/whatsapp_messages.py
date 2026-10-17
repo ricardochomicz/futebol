@@ -29,3 +29,12 @@ def select_new_command(messages, initial_ids, require_author=True):
             continue
         return {"message_id": message["message_id"], "text": message["texts"][0].strip()}
     return None
+
+
+def wait_for_new_command(scan, ignored_ids, pause, check_chat):
+    """Aguarda um comando carregado; a pausa é fornecida pelo navegador."""
+    while True:
+        check_chat()
+        if select_new_command(scan(), ignored_ids, require_author=False) is not None:
+            return True
+        pause()

@@ -6,19 +6,32 @@ from urllib.error import HTTPError, URLError
 def run_session(
     initial_ids, group_id, api_url, api_key, inspect_message, deliver,
     send_response=None, read=input, read_key=None, output=print,
-    browser_errors=(),
+    browser_errors=(), wait_for_message=None,
 ):
     ignored_ids = set(initial_ids)
     pending = None
     reply = None
 
     while True:
-        prompt = (
-            "Enter para repetir a tentativa, /pular para descartar ou /sair: "
-            if pending else
-            "Quando chegar um comando, feche painéis de contato e pressione Enter (/sair para encerrar): "
-        )
-        action = read(prompt).strip().lower()
+        if pending is None and wait_for_message:
+            output("Aguardando novo comando no WhatsApp. Ctrl+C encerra a sessão.")
+            try:
+                if not wait_for_message(ignored_ids):
+                    return
+            except browser_errors as error:
+                output(f"Monitoramento interrompido: {error}")
+                action = read("Volte ao grupo Teste, feche os painéis e pressione Enter (/sair para encerrar): ").strip().lower()
+                if action == "/sair":
+                    return
+                continue
+            action = ""
+        else:
+            prompt = (
+                "Enter para repetir a tentativa, /pular para descartar ou /sair: "
+                if pending else
+                "Quando chegar um comando, feche painéis de contato e pressione Enter (/sair para encerrar): "
+            )
+            action = read(prompt).strip().lower()
         if action == "/sair":
             return
         if action == "/pular":
@@ -37,8 +50,12 @@ def run_session(
                 message = inspect_message(ignored_ids)
             except browser_errors as error:
                 output(f"Falha na identificação: {error}. Nenhum comando foi enviado à API.")
+                if wait_for_message and read("Enter para tentar novamente (/sair para encerrar): ").strip().lower() == "/sair":
+                    return
                 continue
             if message is None:
+                if wait_for_message and read("Identificação não concluída. Enter para tentar novamente (/sair para encerrar): ").strip().lower() == "/sair":
+                    return
                 continue
             pending = {**message, "group_id": group_id}
 

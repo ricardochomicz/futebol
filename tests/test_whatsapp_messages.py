@@ -1,6 +1,6 @@
 import pytest
 
-from app.adapters.whatsapp_messages import rejection_reason, select_new_command
+from app.adapters.whatsapp_messages import rejection_reason, select_new_command, wait_for_new_command
 
 
 def message(identifier="new", text="!vou", **changes):
@@ -60,3 +60,26 @@ def test_manual_contact_mode_still_rejects_old_and_invalid_messages():
 def test_assisted_mode_keeps_order_even_when_first_command_has_no_author():
     records = [message("join", "!vou", author_count=0), message("leave", "!sair")]
     assert select_new_command(records, set(), require_author=False)["message_id"] == "join"
+
+
+def test_watch_ignores_history_and_waits_for_supported_command():
+    from unittest.mock import MagicMock
+    scan = MagicMock(side_effect=[
+        [message("old")],
+        [message("old"), message("chat", "Olá")],
+        [message("new", "!vou", author_count=0)],
+    ])
+    pause, check = MagicMock(), MagicMock()
+    assert wait_for_new_command(scan, {"old"}, pause, check)
+    assert pause.call_count == 2
+    assert check.call_count == 3
+
+
+def test_watch_stops_before_scanning_if_chat_changes():
+    from unittest.mock import MagicMock
+    scan, pause = MagicMock(), MagicMock()
+    check = MagicMock(side_effect=ValueError("grupo errado"))
+    with pytest.raises(ValueError, match="grupo errado"):
+        wait_for_new_command(scan, set(), pause, check)
+    scan.assert_not_called()
+    pause.assert_not_called()

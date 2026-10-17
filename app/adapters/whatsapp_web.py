@@ -12,7 +12,7 @@ from playwright.sync_api import (
 
 from app.adapters.terminal import deliver
 from app.adapters.whatsapp_delivery import send_reply, verify_chat
-from app.adapters.whatsapp_messages import rejection_reason, select_new_command
+from app.adapters.whatsapp_messages import rejection_reason, select_new_command, wait_for_new_command
 from app.adapters.whatsapp_session import run_session
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -42,16 +42,9 @@ def loaded_message_ids(page):
     ))
 
 
-def inspect_command_message(page, initial_ids):
-    drawer = page.get_by_test_id("chat-info-drawer")
-    if drawer.is_visible():
-        print("Feche o painel de contato antes de iniciar a identificação.")
-        return
-    verify_chat(page, "Teste")
-
+def read_message_records(page):
     panel = page.get_by_test_id("conversation-panel-messages")
-    panel.wait_for(state="visible", timeout=15000)
-    records = panel.locator(MESSAGE_SELECTOR).evaluate_all("""elements => elements.map(element => {
+    return panel.locator(MESSAGE_SELECTOR).evaluate_all("""elements => elements.map(element => {
         const authors = element.querySelectorAll('[data-testid="author"]');
         return {
             message_id: element.getAttribute('data-id'),
@@ -63,6 +56,18 @@ def inspect_command_message(page, initial_ids):
             author_visible: authors.length === 1 && authors[0].getClientRects().length > 0
         };
     })""")
+
+
+def inspect_command_message(page, initial_ids):
+    drawer = page.get_by_test_id("chat-info-drawer")
+    if drawer.is_visible():
+        print("Feche o painel de contato antes de iniciar a identificação.")
+        return
+    verify_chat(page, "Teste")
+
+    panel = page.get_by_test_id("conversation-panel-messages")
+    panel.wait_for(state="visible", timeout=15000)
+    records = read_message_records(page)
     candidate = select_new_command(records, initial_ids, require_author=False)
     manual_contact = False
     if candidate is not None:
@@ -150,6 +155,10 @@ def main():
         "--send-reply", action="store_true",
         help="Envia uma resposta ao grupo Teste; sem esta opção, apenas mostra no terminal.",
     )
+    parser.add_argument(
+        "--watch", action="store_true",
+        help="Detecta novos comandos sem Enter; identificação e envio continuam assistidos.",
+    )
     args = parser.parse_args()
 
     SESSION_DIR.mkdir(
@@ -205,6 +214,14 @@ def main():
                     ) if args.send_reply else None,
                     read_key=getpass,
                     browser_errors=(PlaywrightError, sqlite3.Error, ValueError),
+                    wait_for_message=(
+                        lambda ignored: wait_for_new_command(
+                            scan=lambda: read_message_records(page),
+                            ignored_ids=ignored,
+                            pause=lambda: page.wait_for_timeout(1000),
+                            check_chat=lambda: verify_chat(page, "Teste"),
+                        )
+                    ) if args.watch else None,
                 )
             finally:
                 context.close()

@@ -95,3 +95,35 @@ def test_identification_failure_does_not_close_session():
     args = setup(["", "", "/sair"], [ValueError("grupo errado"), command()], browser_errors=(ValueError,))
     run_session(**args)
     args["deliver"].assert_called_once()
+
+
+def test_watch_processes_messages_without_prompting_for_arrival():
+    waiter = MagicMock(side_effect=[True, True, False])
+    args = setup([], [command(), command("m2")], wait_for_message=waiter)
+    run_session(**args)
+    assert args["deliver"].call_count == 2
+    args["read"].assert_not_called()
+
+
+def test_watch_keeps_manual_confirmation_before_sending():
+    waiter = MagicMock(side_effect=[True, False])
+    sender = MagicMock(return_value="Enter enviado")
+    args = setup([""], [command()], wait_for_message=waiter, send_response=sender)
+    run_session(**args)
+    sender.assert_called_once()
+    assert "para enviar" in args["read"].call_args.args[0]
+
+
+def test_watch_error_requires_operator_before_resuming():
+    waiter = MagicMock(side_effect=ValueError("painel aberto"))
+    args = setup(["/sair"], [], wait_for_message=waiter, browser_errors=(ValueError,))
+    run_session(**args)
+    args["deliver"].assert_not_called()
+    args["inspect_message"].assert_not_called()
+
+
+def test_watch_does_not_loop_without_input_after_cancelled_identification():
+    args = setup(["/sair"], [None], wait_for_message=MagicMock(return_value=True))
+    run_session(**args)
+    args["inspect_message"].assert_called_once()
+    args["deliver"].assert_not_called()

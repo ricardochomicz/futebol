@@ -195,7 +195,8 @@ Esse caminho assistido não infere identidade pelo nome nem pela mensagem anteri
 o texto antigo `!lista TESTE-RECEBIDO-001` não é mais aceito. Comandos administrativos
 continuam disponíveis pelo terminal e pelo `/docs`.
 A sessão é assistida: você ainda precisa pressionar Enter para buscar o próximo
-comando e para enviar a resposta. Não há monitoramento autônomo em segundo plano. Por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
+comando e para enviar a resposta. O modo opcional `--watch` detecta chegadas automaticamente, conforme abaixo;
+a identificação e o envio continuam assistidos. Por padrão, **não envia respostas ao WhatsApp**. O envio controlado é opcional,
 conforme descrito abaixo. A integração pelo navegador é experimental.
 Use uma conta e um grupo de teste.
 
@@ -207,6 +208,28 @@ Isso não é um mecanismo de leitura de histórico: mensagens antigas carregadas
 mais tarde por rolagem não são identificadas com segurança como antigas; não role
 o histórico durante o piloto. Mensagens sem autor visível exigem identificação manual pelo operador.
 A API mantém a deduplicação pelo ID original para eventos repetidos.
+
+### Detectar novos comandos sem pressionar Enter
+
+Com a API rodando:
+
+```bash
+python -m app.adapters.whatsapp_web --watch --send-reply
+```
+
+Abra o grupo e inicie a captura conforme os pedidos iniciais. A partir do aviso
+**Aguardando novo comando**, o programa verifica as mensagens carregadas a cada
+segundo. O outro participante pode enviar `!lista`, `!vou`, `!gol` ou `!sair`:
+não é necessário pressionar Enter para detectar a chegada.
+
+Mensagens sem autor ainda exigem que você abra o contato e confirme o telefone.
+O envio da resposta também continua exigindo Enter. Feche o painel do contato
+para que o monitoramento possa retomar. Se o grupo mudar ou um painel estiver
+aberto, o programa pausa e pede sua intervenção. Não role o histórico.
+
+Use **Ctrl+C** para encerrar enquanto estiver aguardando mensagens. `/sair`
+funciona nos pedidos de entrada do terminal, não durante a espera automática.
+Sem `--watch`, o modo assistido anterior permanece disponível.
 
 ### Comandos sucessivos e recuperação de falhas
 
